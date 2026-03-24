@@ -409,9 +409,15 @@ extension Workspace {
                 includeScrollback: includeScrollback,
                 allowFallbackScrollback: shouldPersistScrollback
             )
+            // Check for pi session marker to enable session restore
+            let restoreCommand = PiSessionMarkerReader.restoreCommand(
+                forSurfaceId: panelId.uuidString,
+                ttyName: ttyName
+            )
             terminalSnapshot = SessionTerminalPanelSnapshot(
                 workingDirectory: panelDirectories[panelId],
-                scrollback: resolvedScrollback
+                scrollback: resolvedScrollback,
+                restoreCommand: restoreCommand
             )
             browserSnapshot = nil
             markdownSnapshot = nil
@@ -586,11 +592,13 @@ extension Workspace {
             let replayEnvironment = SessionScrollbackReplayStore.replayEnvironment(
                 for: snapshot.terminal?.scrollback
             )
+            let restoreCommand = snapshot.terminal?.restoreCommand
             guard let terminalPanel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
                 workingDirectory: workingDirectory,
-                startupEnvironment: replayEnvironment
+                startupEnvironment: replayEnvironment,
+                initialCommand: restoreCommand
             ) else {
                 return nil
             }
@@ -7508,7 +7516,8 @@ final class Workspace: Identifiable, ObservableObject {
         inPane paneId: PaneID,
         focus: Bool? = nil,
         workingDirectory: String? = nil,
-        startupEnvironment: [String: String] = [:]
+        startupEnvironment: [String: String] = [:],
+        initialCommand: String? = nil
     ) -> TerminalPanel? {
         let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
         let previousFocusedPanelId = focusedPanelId
@@ -7518,13 +7527,15 @@ final class Workspace: Identifiable, ObservableObject {
         let remoteTerminalStartupCommand = remoteTerminalStartupCommand()
 
         // Create new terminal panel
+        // Prefer explicit initialCommand (for session restore), then remote startup command
+        let resolvedInitialCommand = initialCommand ?? remoteTerminalStartupCommand
         let newPanel = TerminalPanel(
             workspaceId: id,
             context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
             configTemplate: inheritedConfig,
             workingDirectory: workingDirectory,
             portOrdinal: portOrdinal,
-            initialCommand: remoteTerminalStartupCommand,
+            initialCommand: resolvedInitialCommand,
             additionalEnvironment: startupEnvironment
         )
         configureTerminalPanel(newPanel)

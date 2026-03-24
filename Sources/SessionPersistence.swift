@@ -224,6 +224,8 @@ struct SessionGitBranchSnapshot: Codable, Sendable {
 struct SessionTerminalPanelSnapshot: Codable, Sendable {
     var workingDirectory: String?
     var scrollback: String?
+    /// Command to run on restore (e.g., "pi --session <path>" for pi sessions)
+    var restoreCommand: String?
 }
 
 struct SessionBrowserPanelSnapshot: Codable, Sendable {
