@@ -1,4 +1,5 @@
 import AppKit
+import Bonsplit
 import Foundation
 
 // MARK: - Prefix Key Mode Integration
@@ -25,7 +26,8 @@ extension AppDelegate {
         guard let userInfo = notification.userInfo else { return }
         
         // Handle action dispatch
-        if let action = userInfo["action"] as? KeyboardShortcutSettings.Action {
+        if let rawValue = userInfo["actionRawValue"] as? String,
+           let action = KeyboardShortcutSettings.Action(rawValue: rawValue) {
             performPrefixAction(action)
         }
         
@@ -73,10 +75,7 @@ extension AppDelegate {
         case .prevSidebarTab:
             tabManager?.selectPreviousTab()
         case .renameWorkspace:
-            // Trigger workspace rename - set isRenaming on the workspace
-            if let workspace = tabManager?.selectedWorkspace {
-                workspace.isRenaming = true
-            }
+            requestCommandPaletteRenameWorkspace(preferredWindow: preferredWindow, source: "prefix.renameWorkspace")
             
         // Surfaces
         case .newSurface:
@@ -86,10 +85,7 @@ extension AppDelegate {
         case .prevSurface:
             tabManager?.selectPreviousSurface()
         case .renameTab:
-            // Tab rename is same as workspace rename in cmux
-            if let workspace = tabManager?.selectedWorkspace {
-                workspace.isRenaming = true
-            }
+            requestCommandPaletteRenameTab(preferredWindow: preferredWindow, source: "prefix.renameTab")
             
         // Copy mode
         case .toggleTerminalCopyMode:
@@ -112,6 +108,7 @@ extension AppDelegate {
             #if DEBUG
             dlog("prefix.action.unhandled: \(action.rawValue)")
             #endif
+            break
         }
     }
 }

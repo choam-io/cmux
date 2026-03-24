@@ -1,4 +1,5 @@
 import AppKit
+import Bonsplit
 import Foundation
 
 /// Manages tmux-style prefix key mode for keyboard shortcuts.
@@ -57,7 +58,7 @@ final class PrefixKeyMode {
     var timeout: TimeInterval {
         get {
             let value = UserDefaults.standard.double(forKey: Self.timeoutKey)
-            return value > 0 ? value : 1.0
+            return value > 0 ? value : 2.0
         }
         set {
             UserDefaults.standard.set(newValue, forKey: Self.timeoutKey)
@@ -71,6 +72,7 @@ final class PrefixKeyMode {
     static let defaultBindings: [String: KeyboardShortcutSettings.Action] = [
         // Splits (tmux-style)
         "v": .splitRight,      // prefix+v = split vertical (right)
+        "s": .splitDown,       // prefix+s = split horizontal (down) - vim style
         "-": .splitDown,       // prefix+- = split horizontal (down)
         "%": .splitRight,      // prefix+% = split vertical (tmux style)
         "\"": .splitDown,      // prefix+" = split horizontal (tmux style)
@@ -208,7 +210,7 @@ final class PrefixKeyMode {
         NotificationCenter.default.post(
             name: Self.performActionNotification,
             object: nil,
-            userInfo: ["action": action]
+            userInfo: ["actionRawValue": action.rawValue]
         )
         #if DEBUG
         dlog("prefix.action: \(action.rawValue)")
