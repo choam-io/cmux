@@ -64,6 +64,8 @@ PLIST="${DEST_APP}/Contents/Info.plist"
 CLI_DIR="${DEST_APP}/Contents/Resources/bin"
 if [[ -f "${CLI_DIR}/cmux" ]]; then
   mv "${CLI_DIR}/cmux" "${CLI_DIR}/${APP_NAME}"
+  # Keep a cmux symlink so CMUX_BUNDLED_CLI_PATH resolution works
+  ln -sf "${APP_NAME}" "${CLI_DIR}/cmux"
 fi
 
 # Re-sign (ad-hoc)
