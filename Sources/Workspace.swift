@@ -414,6 +414,7 @@ extension Workspace {
                 forSurfaceId: panelId.uuidString,
                 ttyName: ttyName
             )
+            NSLog("[Workspace] Creating terminal snapshot for panel %@, restoreCommand: %@", panelId.uuidString, restoreCommand ?? "nil")
             terminalSnapshot = SessionTerminalPanelSnapshot(
                 workingDirectory: panelDirectories[panelId],
                 scrollback: resolvedScrollback,

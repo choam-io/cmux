@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-private let logger = Logger(subsystem: "io.choam.cmux", category: "PiSessionMarker")
+private let logger = Logger(subsystem: "io.choam.nsmux", category: "PiSessionMarker")
 
 /// Reads pi session markers written by the cmux-session-marker.ts extension.
 /// Markers are stored in ~/.pi/sessions/markers/<surface-id>.json
@@ -23,12 +23,14 @@ enum PiSessionMarkerReader {
     /// Returns a restore command (e.g., "pi --session <path>") if a valid pi marker exists
     /// for the given surface ID or TTY name. Returns nil if no marker found or invalid.
     static func restoreCommand(forSurfaceId surfaceId: String?, ttyName: String?) -> String? {
+        NSLog("[PiSessionMarker] restoreCommand called: surfaceId=%@, ttyName=%@", surfaceId ?? "nil", ttyName ?? "nil")
         logger.debug("restoreCommand called: surfaceId=\(surfaceId ?? "nil"), ttyName=\(ttyName ?? "nil")")
         
         // Try surface ID first (more precise)
         if let surfaceId = surfaceId, !surfaceId.isEmpty {
             if let marker = readMarker(forId: surfaceId) {
                 let cmd = buildRestoreCommand(from: marker)
+                NSLog("[PiSessionMarker] Found marker for surface %@, cmd: %@", surfaceId, cmd)
                 logger.info("Found pi session marker for surface \(surfaceId), restore command: \(cmd)")
                 return cmd
             }
@@ -39,20 +41,24 @@ enum PiSessionMarkerReader {
             let normalizedTty = ttyName.replacingOccurrences(of: "/dev/", with: "")
             if let marker = readMarker(forId: normalizedTty) {
                 let cmd = buildRestoreCommand(from: marker)
+                NSLog("[PiSessionMarker] Found marker for tty %@, cmd: %@", normalizedTty, cmd)
                 logger.info("Found pi session marker for tty \(normalizedTty), restore command: \(cmd)")
                 return cmd
             }
         }
         
+        NSLog("[PiSessionMarker] No marker found")
         logger.debug("No pi session marker found")
         return nil
     }
     
     private static func readMarker(forId id: String) -> PiSessionMarker? {
         let markerPath = markersDir.appendingPathComponent("\(id).json")
+        NSLog("[PiSessionMarker] Checking marker at: %@", markerPath.path)
         logger.debug("Checking marker at: \(markerPath.path)")
         
         guard FileManager.default.fileExists(atPath: markerPath.path) else {
+            NSLog("[PiSessionMarker] Marker file does not exist")
             logger.debug("Marker file does not exist")
             return nil
         }
@@ -60,19 +66,23 @@ enum PiSessionMarkerReader {
         do {
             let data = try Data(contentsOf: markerPath)
             let marker = try JSONDecoder().decode(PiSessionMarker.self, from: data)
+            NSLog("[PiSessionMarker] Parsed marker: sessionFile=%@", marker.sessionFile)
             logger.debug("Parsed marker: sessionFile=\(marker.sessionFile)")
             
             // Validate that the session file still exists
             guard FileManager.default.fileExists(atPath: marker.sessionFile) else {
+                NSLog("[PiSessionMarker] Session file no longer exists: %@", marker.sessionFile)
                 logger.warning("Session file no longer exists: \(marker.sessionFile)")
                 // Clean up stale marker - session file is gone
                 try? FileManager.default.removeItem(at: markerPath)
                 return nil
             }
             
+            NSLog("[PiSessionMarker] Marker valid, returning")
             logger.debug("Marker valid, session file exists")
             return marker
         } catch {
+            NSLog("[PiSessionMarker] Failed to read/parse marker: %@", error.localizedDescription)
             logger.error("Failed to read/parse marker: \(error.localizedDescription)")
             return nil
         }
@@ -81,6 +91,34 @@ enum PiSessionMarkerReader {
     private static func buildRestoreCommand(from marker: PiSessionMarker) -> String {
         // Use shell quoting for the session file path
         let escapedPath = marker.sessionFile.replacingOccurrences(of: "'", with: "'\"'\"'")
+        // Use full path to pi since initial commands run before shell rc files
+        // Common locations: nvm, homebrew, direct install
+        let piPaths = [
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/versions/node").path,
+            "/opt/homebrew/bin/pi",
+            "/usr/local/bin/pi",
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/pi").path
+        ]
+        
+        // Try to find pi in nvm first (most likely for this user)
+        let nvmBase = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/versions/node")
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmBase.path) {
+            for version in versions.sorted().reversed() {  // prefer newest
+                let piPath = nvmBase.appendingPathComponent("\(version)/bin/pi").path
+                if FileManager.default.fileExists(atPath: piPath) {
+                    return "\(piPath) --session '\(escapedPath)'"
+                }
+            }
+        }
+        
+        // Try other common locations
+        for path in ["/opt/homebrew/bin/pi", "/usr/local/bin/pi"] {
+            if FileManager.default.fileExists(atPath: path) {
+                return "\(path) --session '\(escapedPath)'"
+            }
+        }
+        
+        // Fallback: use pi and hope it's in PATH (won't work for initial commands)
         return "pi --session '\(escapedPath)'"
     }
     
