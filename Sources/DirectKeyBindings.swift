@@ -176,24 +176,36 @@ final class DirectKeyBindings {
         cacheTimestamp = now
 
         let myPid = getpid()
-        var childPids = [pid_t](repeating: 0, count: 256)
-        let count = proc_listchildpids(myPid, &childPids, Int32(childPids.count * MemoryLayout<pid_t>.size))
-        guard count > 0 else {
-            surfacePidCache.removeAll()
-            return
-        }
-
         var newCache: [String: pid_t] = [:]
+
+        // nsmux -> login -> zsh (shell with CMUX_SURFACE_ID)
+        // Walk up to 3 levels deep to find shells with CMUX_SURFACE_ID
+        Self.findSurfaceShells(parentPid: myPid, depth: 0, maxDepth: 3, cache: &newCache)
+
+        surfacePidCache = newCache
+    }
+
+    /// Recursively find child processes that have CMUX_SURFACE_ID set.
+    private static func findSurfaceShells(parentPid: pid_t, depth: Int, maxDepth: Int, cache: inout [String: pid_t]) {
+        guard depth < maxDepth else { return }
+
+        var childPids = [pid_t](repeating: 0, count: 256)
+        let count = proc_listchildpids(parentPid, &childPids, Int32(childPids.count * MemoryLayout<pid_t>.size))
+        guard count > 0 else { return }
+
         let childCount = min(Int(count), childPids.count)
         for i in 0..<childCount {
             let pid = childPids[i]
             guard pid > 0 else { continue }
-            if let env = Self.readProcessEnvironment(pid: pid),
+
+            if let env = readProcessEnvironment(pid: pid),
                let surfaceId = env["CMUX_SURFACE_ID"] {
-                newCache[surfaceId] = pid
+                cache[surfaceId] = pid
+            } else {
+                // Recurse into children (e.g. login -> zsh)
+                findSurfaceShells(parentPid: pid, depth: depth + 1, maxDepth: maxDepth, cache: &cache)
             }
         }
-        surfacePidCache = newCache
     }
 
     // MARK: - Process Utilities
@@ -272,4 +284,22 @@ final class DirectKeyBindings {
     }
 
     private init() {}
+
+    // MARK: - Debug Logging
+
+    /// Log to /tmp/nsmux-directkeys.log when directKeyBindings.debug is enabled.
+    /// Enable with: defaults write io.choam.nsmux directKeyBindings.debug -bool true
+    static func debugLog(_ message: String) {
+        guard UserDefaults.standard.bool(forKey: "directKeyBindings.debug") else { return }
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "\(timestamp) [DirectKeyBindings] \(message)\n"
+        if let data = line.data(using: .utf8),
+           let handle = FileHandle(forWritingAtPath: "/tmp/nsmux-directkeys.log") {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            handle.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: "/tmp/nsmux-directkeys.log", contents: line.data(using: .utf8))
+        }
+    }
 }
