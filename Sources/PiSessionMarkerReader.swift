@@ -69,17 +69,14 @@ enum PiSessionMarkerReader {
             NSLog("[PiSessionMarker] Parsed marker: sessionFile=%@", marker.sessionFile)
             logger.debug("Parsed marker: sessionFile=\(marker.sessionFile)")
             
-            // Validate that the session file still exists
-            guard FileManager.default.fileExists(atPath: marker.sessionFile) else {
-                NSLog("[PiSessionMarker] Session file no longer exists: %@", marker.sessionFile)
-                logger.warning("Session file no longer exists: \(marker.sessionFile)")
-                // Clean up stale marker - session file is gone
-                try? FileManager.default.removeItem(at: markerPath)
-                return nil
-            }
+            // Return the marker even if the session file doesn't exist yet.
+            // Pi writes markers on session_start before the jsonl file is created.
+            // The file will exist by the time we need to restore.
+            // Stale markers (from old sessions) are harmless -- the restore command
+            // will fail gracefully if the session file is truly gone.
             
             NSLog("[PiSessionMarker] Marker valid, returning")
-            logger.debug("Marker valid, session file exists")
+            logger.debug("Marker valid, session file exists=\(FileManager.default.fileExists(atPath: marker.sessionFile))")
             return marker
         } catch {
             NSLog("[PiSessionMarker] Failed to read/parse marker: %@", error.localizedDescription)
