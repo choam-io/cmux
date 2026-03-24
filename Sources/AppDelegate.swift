@@ -9072,6 +9072,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return true
         }
         
+        // Direct key bindings: Ctrl+h/j/k/l pane navigation (no prefix required)
+        if DirectKeyBindings.shared.handleKeyEvent(event) {
+            return true
+        }
+        
         // `charactersIgnoringModifiers` can be nil for some synthetic NSEvents and certain special keys.
         // Treat nil as "" and rely on keyCode/layout-aware fallback logic where needed.
         // When a non-Latin input source is active (Korean, Chinese, Japanese, etc.),
