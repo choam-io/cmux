@@ -134,6 +134,7 @@ class TerminalController {
         "workspace.last",
         "surface.focus",
         "pane.focus",
+        "pane.navigate",
         "pane.last",
         "browser.focus_webview",
         "browser.focus",
@@ -2138,6 +2139,8 @@ class TerminalController {
             return v2Result(id: id, self.v2PaneList(params: params))
         case "pane.focus":
             return v2Result(id: id, self.v2PaneFocus(params: params))
+        case "pane.navigate":
+            return v2Result(id: id, self.v2PaneNavigate(params: params))
         case "pane.surfaces":
             return v2Result(id: id, self.v2PaneSurfaces(params: params))
         case "pane.create":
@@ -2475,6 +2478,7 @@ class TerminalController {
             "surface.trigger_flash",
             "pane.list",
             "pane.focus",
+            "pane.navigate",
             "pane.surfaces",
             "pane.create",
             "pane.resize",
@@ -5919,6 +5923,49 @@ class TerminalController {
             ws.bonsplitController.focusPane(paneId)
             let windowId = v2ResolveWindowId(tabManager: tabManager)
             result = .ok(["window_id": v2OrNull(windowId?.uuidString), "window_ref": v2Ref(kind: .window, uuid: windowId), "workspace_id": ws.id.uuidString, "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id), "pane_id": paneId.id.uuidString, "pane_ref": v2Ref(kind: .pane, uuid: paneId.id)])
+        }
+        return result
+    }
+
+    private func v2PaneNavigate(params: [String: Any]) -> V2CallResult {
+        guard let tabManager = v2ResolveTabManager(params: params) else {
+            return .err(code: "unavailable", message: "TabManager not available", data: nil)
+        }
+        guard let directionStr = params["direction"] as? String else {
+            return .err(code: "invalid_params", message: "Missing or invalid 'direction' (left|right|up|down)", data: nil)
+        }
+        let direction: NavigationDirection
+        switch directionStr.lowercased() {
+        case "left": direction = .left
+        case "right": direction = .right
+        case "up": direction = .up
+        case "down": direction = .down
+        default:
+            return .err(code: "invalid_params", message: "Invalid direction '\(directionStr)'. Must be left|right|up|down", data: nil)
+        }
+
+        var result: V2CallResult = .err(code: "unavailable", message: "No workspace selected", data: nil)
+        v2MainSync {
+            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
+                result = .err(code: "not_found", message: "Workspace not found", data: nil)
+                return
+            }
+            if let windowId = v2ResolveWindowId(tabManager: tabManager) {
+                _ = AppDelegate.shared?.focusMainWindow(windowId: windowId)
+                setActiveTabManager(tabManager)
+            }
+            if tabManager.selectedTabId != ws.id {
+                tabManager.selectWorkspace(ws)
+            }
+            tabManager.movePaneFocus(direction: direction)
+            let windowId = v2ResolveWindowId(tabManager: tabManager)
+            result = .ok([
+                "window_id": v2OrNull(windowId?.uuidString),
+                "window_ref": v2Ref(kind: .window, uuid: windowId),
+                "workspace_id": ws.id.uuidString,
+                "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
+                "direction": directionStr.lowercased()
+            ])
         }
         return result
     }

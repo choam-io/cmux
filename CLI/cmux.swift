@@ -1799,6 +1799,17 @@ struct CMUXCLI {
             let payload = try client.sendV2(method: "pane.focus", params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["pane", "workspace"]))
 
+        case "navigate-pane":
+            let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
+            guard let direction = optionValue(commandArgs, name: "--direction") ?? commandArgs.first else {
+                throw CLIError(message: "navigate-pane requires --direction <left|right|up|down>")
+            }
+            var params: [String: Any] = ["direction": direction]
+            let wsId = try normalizeWorkspaceHandle(workspaceArg, client: client)
+            if let wsId { params["workspace_id"] = wsId }
+            let payload = try client.sendV2(method: "pane.navigate", params: params)
+            printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: v2OKSummary(payload, idFormat: idFormat, kinds: ["workspace"]))
+
         case "new-pane":
             let workspaceArg = workspaceFromArgsOrEnv(commandArgs, windowOverride: windowId)
             let type = optionValue(commandArgs, name: "--type")
@@ -6518,6 +6529,22 @@ struct CMUXCLI {
               cmux focus-pane --pane pane:2
               cmux focus-pane pane:1
               cmux focus-pane --pane pane:1 --workspace workspace:2
+            """
+        case "navigate-pane":
+            return """
+            Usage: cmux navigate-pane --direction <left|right|up|down> [flags]
+
+            Navigate to the adjacent pane in the given direction. Used by vim-tmux-navigator
+            style plugins to move focus between cmux panes from inside nvim.
+
+            Flags:
+              --direction <left|right|up|down>  Navigation direction (required)
+              --workspace <id|ref>              Workspace context (default: $CMUX_WORKSPACE_ID)
+
+            Example:
+              cmux navigate-pane --direction left
+              cmux navigate-pane --direction right --workspace workspace:2
+              cmux navigate-pane left
             """
         case "new-pane":
             return """
@@ -12685,6 +12712,7 @@ struct CMUXCLI {
           list-pane-surfaces [--workspace <id|ref>] [--pane <id|ref>]
           tree [--all] [--workspace <id|ref|index>]
           focus-pane --pane <id|ref> [--workspace <id|ref>]
+          navigate-pane --direction <left|right|up|down> [--workspace <id|ref>]
           new-pane [--type <terminal|browser>] [--direction <left|right|up|down>] [--workspace <id|ref>] [--url <url>]
           new-surface [--type <terminal|browser>] [--pane <id|ref>] [--workspace <id|ref>] [--url <url>]
           close-surface [--surface <id|ref>] [--workspace <id|ref>]
