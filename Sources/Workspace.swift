@@ -261,6 +261,7 @@ extension Workspace {
 
     func restoreSessionSnapshot(_ snapshot: SessionWorkspaceSnapshot) {
         restoredTerminalScrollbackByPanelId.removeAll(keepingCapacity: false)
+        cachedRestoreCommandByPanelId.removeAll(keepingCapacity: false)
 
         let normalizedCurrentDirectory = snapshot.currentDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedCurrentDirectory.isEmpty {
@@ -420,6 +421,16 @@ extension Workspace {
                 if let shellPid = surfacePidMap[panelId.uuidString] {
                     restoreCommand = ForegroundProcessDetector.restoreCommand(forShellPid: shellPid)
                 }
+            }
+            // Fall back to the cached restore command from when this panel was created
+            // via session restore. This covers the case where the marker file is keyed
+            // by the old surface ID (from before nsmux restarted).
+            if restoreCommand == nil {
+                restoreCommand = cachedRestoreCommandByPanelId[panelId]
+            }
+            // Update the cache with whatever we found (or keep the old value)
+            if let restoreCommand = restoreCommand {
+                cachedRestoreCommandByPanelId[panelId] = restoreCommand
             }
             NSLog("[Workspace] Creating terminal snapshot for panel %@, restoreCommand: %@", panelId.uuidString, restoreCommand ?? "nil")
             terminalSnapshot = SessionTerminalPanelSnapshot(
@@ -609,6 +620,11 @@ extension Workspace {
                 initialCommand: restoreCommand
             ) else {
                 return nil
+            }
+            // Cache the restore command so subsequent autosaves don't need to re-lookup
+            // markers by surface ID (which changes on every nsmux restart).
+            if let restoreCommand = restoreCommand {
+                cachedRestoreCommandByPanelId[terminalPanel.id] = restoreCommand
             }
             let fallbackScrollback = SessionPersistencePolicy.truncatedScrollback(snapshot.terminal?.scrollback)
             if let fallbackScrollback {
@@ -5539,6 +5555,10 @@ final class Workspace: Identifiable, ObservableObject {
     /// Used for stale-session detection: if the PID is dead, the status entry is cleared.
     var agentPIDs: [String: pid_t] = [:]
     private var restoredTerminalScrollbackByPanelId: [UUID: String] = [:]
+    /// Cached restore commands per panel. Set when a panel is created via session restore
+    /// (initialCommand), and carried forward across autosaves. This avoids re-looking up
+    /// markers by surface ID, which breaks after nsmux restarts (new surface IDs).
+    private var cachedRestoreCommandByPanelId: [UUID: String] = [:]
 
     private static func isProxyOnlyRemoteError(_ detail: String) -> Bool {
         let lowered = detail.lowercased()
