@@ -126,18 +126,10 @@ final class DirectKeyBindings {
 
     // MARK: - Vim Detection
 
-    /// Process names recognized as vim (matches vim-tmux-navigator's regex)
-    private static let vimProcessNames: Set<String> = [
-        "vim", "nvim", "vimdiff", "nvimdiff",
-        "view", "nview",
-        "gvim", "gview",
-        "lvim", "vimx",
-    ]
-
     /// Cache: surface UUID -> shell PID. Rebuilt when stale.
     private var surfacePidCache: [String: pid_t] = [:]
     private var cacheTimestamp: Date = .distantPast
-    private static let cacheTTL: TimeInterval = 2.0 // Rebuild every 2s max
+    private static let cacheTTL: TimeInterval = 2.0
 
     /// Check if the focused terminal surface's foreground process is vim/nvim.
     private func isFocusedSurfaceRunningVim(tabManager: TabManager) -> Bool {
@@ -147,26 +139,19 @@ final class DirectKeyBindings {
             return false
         }
 
-        // Get the terminal panel for the focused surface
         guard let panel = workspace.panel(for: selectedTab.id),
               let terminalPanel = panel as? TerminalPanel else {
-            return false // Not a terminal (e.g. browser panel)
+            return false
         }
 
         let surfaceIdStr = terminalPanel.surface.id.uuidString
 
-        // Look up the shell PID for this surface
         refreshCacheIfNeeded()
         guard let shellPid = surfacePidCache[surfaceIdStr] else {
             return false
         }
 
-        // Walk from shell to leaf process and check if it's vim
-        let leafPid = Self.findLeafProcess(parentPid: shellPid)
-        guard let processPath = Self.processPath(for: leafPid) else { return false }
-        let baseName = (processPath as NSString).lastPathComponent.lowercased()
-
-        return Self.vimProcessNames.contains(baseName)
+        return ForegroundProcessDetector.isVim(shellPid: shellPid)
     }
 
     /// Rebuild the surface ID -> shell PID cache if stale.
@@ -174,113 +159,7 @@ final class DirectKeyBindings {
         let now = Date()
         guard now.timeIntervalSince(cacheTimestamp) >= Self.cacheTTL else { return }
         cacheTimestamp = now
-
-        let myPid = getpid()
-        var newCache: [String: pid_t] = [:]
-
-        // nsmux -> login -> zsh (shell with CMUX_SURFACE_ID)
-        // Walk up to 3 levels deep to find shells with CMUX_SURFACE_ID
-        Self.findSurfaceShells(parentPid: myPid, depth: 0, maxDepth: 3, cache: &newCache)
-
-        surfacePidCache = newCache
-    }
-
-    /// Recursively find child processes that have CMUX_SURFACE_ID set.
-    private static func findSurfaceShells(parentPid: pid_t, depth: Int, maxDepth: Int, cache: inout [String: pid_t]) {
-        guard depth < maxDepth else { return }
-
-        var childPids = [pid_t](repeating: 0, count: 256)
-        let count = proc_listchildpids(parentPid, &childPids, Int32(childPids.count * MemoryLayout<pid_t>.size))
-        guard count > 0 else { return }
-
-        let childCount = min(Int(count), childPids.count)
-        for i in 0..<childCount {
-            let pid = childPids[i]
-            guard pid > 0 else { continue }
-
-            if let env = readProcessEnvironment(pid: pid),
-               let surfaceId = env["CMUX_SURFACE_ID"] {
-                cache[surfaceId] = pid
-            } else {
-                // Recurse into children (e.g. login -> zsh)
-                findSurfaceShells(parentPid: pid, depth: depth + 1, maxDepth: maxDepth, cache: &cache)
-            }
-        }
-    }
-
-    // MARK: - Process Utilities
-
-    /// Walk child processes to find the leaf (foreground) process.
-    private static func findLeafProcess(parentPid: pid_t) -> pid_t {
-        var current = parentPid
-        for _ in 0..<20 {
-            var childPids = [pid_t](repeating: 0, count: 64)
-            let count = proc_listchildpids(current, &childPids, Int32(childPids.count * MemoryLayout<pid_t>.size))
-            if count <= 0 {
-                return current
-            }
-            let childCount = min(Int(count), childPids.count)
-            if childCount == 0 {
-                return current
-            }
-            current = childPids[0]
-        }
-        return current
-    }
-
-    /// Get the executable path for a PID.
-    private static func processPath(for pid: pid_t) -> String? {
-        // PROC_PIDPATHINFO_MAXSIZE = 4*MAXPATHLEN = 4096
-        var buffer = [CChar](repeating: 0, count: 4096)
-        let result = proc_pidpath(pid, &buffer, UInt32(buffer.count))
-        guard result > 0 else { return nil }
-        return String(cString: buffer)
-    }
-
-    /// Read environment variables of a process via KERN_PROCARGS2.
-    /// Works for child processes of the current process.
-    private static func readProcessEnvironment(pid: pid_t) -> [String: String]? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size: Int = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return nil }
-
-        var buffer = [CChar](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return nil }
-
-        let data = Data(bytes: buffer, count: size)
-        guard data.count >= 4 else { return nil }
-
-        // First 4 bytes: argc
-        let argc = data.withUnsafeBytes { $0.load(as: Int32.self) }
-
-        // Skip past executable path
-        var offset = 4
-        while offset < data.count && data[offset] != 0 { offset += 1 }
-        // Skip null padding between exec path and first arg
-        while offset < data.count && data[offset] == 0 { offset += 1 }
-        // Skip argc args
-        var argsSkipped: Int32 = 0
-        while argsSkipped < argc && offset < data.count {
-            while offset < data.count && data[offset] != 0 { offset += 1 }
-            offset += 1
-            argsSkipped += 1
-        }
-
-        // Parse environment variables (null-separated KEY=VALUE pairs)
-        var env: [String: String] = [:]
-        while offset < data.count {
-            var end = offset
-            while end < data.count && data[end] != 0 { end += 1 }
-            if end == offset { break }
-            if let str = String(data: data[offset..<end], encoding: .utf8),
-               let eqIdx = str.firstIndex(of: "=") {
-                let key = String(str[str.startIndex..<eqIdx])
-                let val = String(str[str.index(after: eqIdx)...])
-                env[key] = val
-            }
-            offset = end + 1
-        }
-        return env
+        surfacePidCache = ForegroundProcessDetector.buildSurfacePidMap(parentPid: getpid())
     }
 
     private init() {}

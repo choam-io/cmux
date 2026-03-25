@@ -42,6 +42,7 @@
 			PFXKEY03 /* PrefixKeyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFXKEY01 /* PrefixKeyMode.swift */; };
 			PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */; };
 			DKBND01 /* DirectKeyBindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DKBND00 /* DirectKeyBindings.swift */; };
+			FGPD01 /* ForegroundProcessDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FGPD00 /* ForegroundProcessDetector.swift */; };
 			PISESS02 /* PiSessionMarkerReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = PISESS01 /* PiSessionMarkerReader.swift */; };
 			A5001094 /* NotificationsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001091 /* NotificationsPage.swift */; };
 			A5001095 /* TerminalNotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001092 /* TerminalNotificationStore.swift */; };
@@ -225,6 +226,7 @@
 		PFXKEY01 /* PrefixKeyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefixKeyMode.swift; sourceTree = "<group>"; };
 		PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+PrefixKeyMode.swift"; sourceTree = "<group>"; };
 		DKBND00 /* DirectKeyBindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectKeyBindings.swift; sourceTree = "<group>"; };
+		FGPD00 /* ForegroundProcessDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundProcessDetector.swift; sourceTree = "<group>"; };
 		PISESS01 /* PiSessionMarkerReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiSessionMarkerReader.swift; sourceTree = "<group>"; };
 		A5001091 /* NotificationsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsPage.swift; sourceTree = "<group>"; };
 		A5001092 /* TerminalNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalNotificationStore.swift; sourceTree = "<group>"; };
@@ -448,6 +450,7 @@
 				PISESS01 /* PiSessionMarkerReader.swift */,
 				PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */,
 				DKBND00 /* DirectKeyBindings.swift */,
+				FGPD00 /* ForegroundProcessDetector.swift */,
 				A5001091 /* NotificationsPage.swift */,
 				A5001092 /* TerminalNotificationStore.swift */,
 				A5001301 /* SurfaceSearchOverlay.swift */,
@@ -751,6 +754,7 @@
 				PFXKEY03 /* PrefixKeyMode.swift in Sources */,
 				PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */,
 				DKBND01 /* DirectKeyBindings.swift in Sources */,
+				FGPD01 /* ForegroundProcessDetector.swift in Sources */,
 				PISESS02 /* PiSessionMarkerReader.swift in Sources */,
 				A5001094 /* NotificationsPage.swift in Sources */,
 				A5001095 /* TerminalNotificationStore.swift in Sources */,

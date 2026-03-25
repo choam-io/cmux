@@ -410,10 +410,17 @@ extension Workspace {
                 allowFallbackScrollback: shouldPersistScrollback
             )
             // Check for pi session marker to enable session restore
-            let restoreCommand = PiSessionMarkerReader.restoreCommand(
+            var restoreCommand = PiSessionMarkerReader.restoreCommand(
                 forSurfaceId: panelId.uuidString,
                 ttyName: ttyName
             )
+            // If no pi marker, check for restorable foreground processes (e.g. nvim)
+            if restoreCommand == nil {
+                let surfacePidMap = ForegroundProcessDetector.buildSurfacePidMap(parentPid: getpid())
+                if let shellPid = surfacePidMap[panelId.uuidString] {
+                    restoreCommand = ForegroundProcessDetector.restoreCommand(forShellPid: shellPid)
+                }
+            }
             NSLog("[Workspace] Creating terminal snapshot for panel %@, restoreCommand: %@", panelId.uuidString, restoreCommand ?? "nil")
             terminalSnapshot = SessionTerminalPanelSnapshot(
                 workingDirectory: panelDirectories[panelId],

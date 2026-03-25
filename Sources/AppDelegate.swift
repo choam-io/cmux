@@ -2706,7 +2706,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         isTerminatingApp = true
-        _ = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+        // Don't save here -- the last autosave (every 8s) already captured the good state.
+        // Saving during termination risks overwriting with degraded state as windows tear down.
 
         // If the user already confirmed via the Cmd+Q shortcut warning dialog
         // (handleQuitShortcutWarning), skip the check to avoid a second alert.
@@ -2751,7 +2752,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationWillTerminate(_ notification: Notification) {
         isTerminatingApp = true
-        _ = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+        // Don't save -- same reason as applicationShouldTerminate.
         stopSessionAutosaveTimer()
         TerminalController.shared.stop()
         VSCodeServeWebController.shared.stop()
@@ -2871,8 +2872,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func prepareStartupSessionSnapshotIfNeeded() {
         guard !didPrepareStartupSessionSnapshot else { return }
         didPrepareStartupSessionSnapshot = true
-        guard SessionRestorePolicy.shouldAttemptRestore() else { return }
+        let shouldRestore = SessionRestorePolicy.shouldAttemptRestore()
+        NSLog("[SessionRestore] prepare: shouldAttemptRestore=%d, args=%@", shouldRestore ? 1 : 0, CommandLine.arguments.joined(separator: " "))
+        guard shouldRestore else { return }
         startupSessionSnapshot = SessionPersistenceStore.load()
+        NSLog("[SessionRestore] prepare: loaded snapshot with %d windows", startupSessionSnapshot?.windows.count ?? 0)
     }
 
     private func persistedWindowGeometry(
@@ -2941,6 +2945,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         let startupSnapshot = startupSessionSnapshot
         let primaryWindowSnapshot = startupSnapshot?.windows.first
+        NSLog("[SessionRestore] attemptRestore: hasSnapshot=%d, windowCount=%d, primaryWindowSnapshot=%d",
+              startupSnapshot != nil ? 1 : 0,
+              startupSnapshot?.windows.count ?? 0,
+              primaryWindowSnapshot != nil ? 1 : 0)
         if let primaryWindowSnapshot {
             isApplyingStartupSessionRestore = true
 #if DEBUG
@@ -3000,7 +3008,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func completeStartupSessionRestore() {
         startupSessionSnapshot = nil
         isApplyingStartupSessionRestore = false
-        _ = saveSessionSnapshot(includeScrollback: false)
+        // Don't save immediately after restore -- the restored state may be degraded
+        // if some panels failed to create. The autosave timer (every 8s) will capture
+        // the state once everything has settled.
     }
 
     private func applySessionWindowSnapshot(
@@ -3523,6 +3533,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     @discardableResult
+    /// Save session snapshot only if it wouldn't degrade the existing one.
+    /// During app termination, windows may already be closing, producing a snapshot
+    /// with fewer panels/workspaces than the last autosave captured.
+    private func saveSessionSnapshotIfNotDegraded(includeScrollback: Bool) {
+        // Count current live panels across all windows
+        let liveContexts = mainWindowContexts.values
+        var livePanelCount = 0
+        for context in liveContexts {
+            for tab in context.tabManager.tabs {
+                livePanelCount += tab.bonsplitController.allPaneIds.count
+            }
+        }
+
+        // Load existing snapshot to compare
+        if let existing = SessionPersistenceStore.load() {
+            var existingPanelCount = 0
+            for window in existing.windows {
+                for workspace in window.tabManager.workspaces {
+                    existingPanelCount += workspace.panels.count
+                }
+            }
+
+            // If current state has fewer panels, the app is tearing down -- keep the existing snapshot
+            if livePanelCount < existingPanelCount {
+                return
+            }
+        }
+
+        _ = saveSessionSnapshot(includeScrollback: includeScrollback, removeWhenEmpty: false)
+    }
+
     private func saveSessionSnapshot(includeScrollback: Bool, removeWhenEmpty: Bool = false) -> Bool {
         if Self.shouldSkipSessionSaveDuringStartupRestore(
             isApplyingStartupSessionRestore: isApplyingStartupSessionRestore,
