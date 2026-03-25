@@ -22,13 +22,18 @@ enum ForegroundProcessDetector {
     ]
 
     /// Detect the foreground process for a shell PID and return a restore command if applicable.
-    /// Returns nil if the foreground process is just a shell or an unrecognized process.
+    /// Returns the full path to the executable so it works in the login shell context
+    /// where PATH may be minimal.
     static func restoreCommand(forShellPid shellPid: pid_t) -> String? {
         let leafPid = findLeafProcess(parentPid: shellPid)
         guard let path = processPath(for: leafPid) else { return nil }
         let baseName = (path as NSString).lastPathComponent.lowercased()
 
-        return restorableProcesses[baseName]
+        // Only restore known-safe processes
+        guard restorableProcesses[baseName] != nil else { return nil }
+
+        // Use the full path so it works in the bare login shell context
+        return path
     }
 
     /// Check if the foreground process is vim/nvim.

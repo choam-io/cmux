@@ -2766,12 +2766,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationWillResignActive(_ notification: Notification) {
         guard !isTerminatingApp else { return }
-        _ = saveSessionSnapshot(includeScrollback: false)
+        _ = saveSessionSnapshot(includeScrollback: false, caller: "applicationWillResignActive")
     }
 
     func persistSessionForUpdateRelaunch() {
         isTerminatingApp = true
-        _ = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+        _ = saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, caller: "persistSessionForUpdateRelaunch")
     }
 
     func configure(tabManager: TabManager, notificationStore: TerminalNotificationStore, sidebarState: SidebarState) {
@@ -2938,14 +2938,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func attemptStartupSessionRestoreIfNeeded(primaryWindow: NSWindow) {
-        guard !didAttemptStartupSessionRestore else { return }
+        guard !didAttemptStartupSessionRestore else {
+            NSLog("[SessionRestore] SKIPPED: already attempted")
+            return
+        }
         didAttemptStartupSessionRestore = true
-        guard !didHandleExplicitOpenIntentAtStartup else { return }
-        guard let primaryContext = contextForMainTerminalWindow(primaryWindow) else { return }
+        guard !didHandleExplicitOpenIntentAtStartup else {
+            NSLog("[SessionRestore] SKIPPED: explicit open intent")
+            return
+        }
+        guard let primaryContext = contextForMainTerminalWindow(primaryWindow) else {
+            NSLog("[SessionRestore] SKIPPED: no primary context for window")
+            return
+        }
 
         let startupSnapshot = startupSessionSnapshot
         let primaryWindowSnapshot = startupSnapshot?.windows.first
-        NSLog("[SessionRestore] attemptRestore: hasSnapshot=%d, windowCount=%d, primaryWindowSnapshot=%d",
+        NSLog("[SessionRestore] attemptRestore: hasSnapshot=%d windowCount=%d primaryWindowSnapshot=%d",
               startupSnapshot != nil ? 1 : 0,
               startupSnapshot?.windows.count ?? 0,
               primaryWindowSnapshot != nil ? 1 : 0)
@@ -3431,7 +3440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.isTerminatingApp = true
-                _ = self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+                _ = self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, caller: "willPowerOff")
             }
         }
         lifecycleSnapshotObservers.append(powerOffObserver)
@@ -3444,9 +3453,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if self.isTerminatingApp {
-                    _ = self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
+                    _ = self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false, caller: "sessionResignActive.terminating")
                 } else {
-                    _ = self.saveSessionSnapshot(includeScrollback: false)
+                    _ = self.saveSessionSnapshot(includeScrollback: false, caller: "sessionResignActive")
                 }
             }
         }
@@ -3561,10 +3570,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
 
-        _ = saveSessionSnapshot(includeScrollback: includeScrollback, removeWhenEmpty: false)
+        _ = saveSessionSnapshot(includeScrollback: includeScrollback, removeWhenEmpty: false, caller: "ifNotDegraded")
     }
 
-    private func saveSessionSnapshot(includeScrollback: Bool, removeWhenEmpty: Bool = false) -> Bool {
+    private func saveSessionSnapshot(includeScrollback: Bool, removeWhenEmpty: Bool = false, caller: String = #function) -> Bool {
+        // Trace every save
+        let contexts = mainWindowContexts.values
+        var totalPanels = 0
+        var totalWorkspaces = 0
+        for ctx in contexts {
+            totalWorkspaces += ctx.tabManager.tabs.count
+            for tab in ctx.tabManager.tabs {
+                totalPanels += tab.bonsplitController.allPaneIds.count
+            }
+        }
+        NSLog("[SessionSave] caller=%@ isTerminating=%d isRestoringStartup=%d windows=%d workspaces=%d panels=%d scrollback=%d removeWhenEmpty=%d",
+              caller, isTerminatingApp ? 1 : 0, isApplyingStartupSessionRestore ? 1 : 0,
+              mainWindowContexts.count, totalWorkspaces, totalPanels,
+              includeScrollback ? 1 : 0, removeWhenEmpty ? 1 : 0)
+
         if Self.shouldSkipSessionSaveDuringStartupRestore(
             isApplyingStartupSessionRestore: isApplyingStartupSessionRestore,
             includeScrollback: includeScrollback
@@ -3732,7 +3756,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 #if DEBUG
         let saveStart = ProcessInfo.processInfo.systemUptime
 #endif
-        _ = saveSessionSnapshot(includeScrollback: false)
+        _ = saveSessionSnapshot(includeScrollback: false, caller: "autosaveTick")
 #if DEBUG
         saveMs = (ProcessInfo.processInfo.systemUptime - saveStart) * 1000.0
 #endif
@@ -3960,6 +3984,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             "mainWindow.register windowId=\(String(windowId.uuidString.prefix(8))) window={\(debugWindowToken(window))} manager=\(debugManagerToken(tabManager)) priorActiveMgr=\(priorManagerToken) \(debugShortcutRouteSnapshot())"
         )
 #endif
+        NSLog("[SessionRestore] registerMainWindow: windowId=%@ totalContexts=%d isTerminating=%d didAttemptRestore=%d",
+              String(windowId.uuidString.prefix(8)), mainWindowContexts.count, isTerminatingApp ? 1 : 0, didAttemptStartupSessionRestore ? 1 : 0)
         notifyMainWindowContextsDidChange()
         if window.isKeyWindow {
             setActiveMainWindow(window)
@@ -3967,7 +3993,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         attemptStartupSessionRestoreIfNeeded(primaryWindow: window)
         if !isTerminatingApp {
-            _ = saveSessionSnapshot(includeScrollback: false)
+            _ = saveSessionSnapshot(includeScrollback: false, caller: "registerMainWindow")
         }
     }
 
@@ -11303,12 +11329,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // in applicationShouldTerminate/applicationWillTerminate. Saving again here would
         // overwrite it as windows tear down one-by-one, dropping closed windows and replay.
         if Self.shouldPersistSnapshotOnWindowUnregister(isTerminatingApp: isTerminatingApp) {
+            NSLog("[SessionSave] unregisterMainWindow: saving (isTerminating=%d remainingContexts=%d)",
+                  isTerminatingApp ? 1 : 0, mainWindowContexts.count)
             _ = saveSessionSnapshot(
                 includeScrollback: false,
                 removeWhenEmpty: Self.shouldRemoveSnapshotWhenNoWindowsRemainOnWindowUnregister(
                     isTerminatingApp: isTerminatingApp
-                )
+                ),
+                caller: "unregisterMainWindow"
             )
+        } else {
+            NSLog("[SessionSave] unregisterMainWindow: SKIPPED (isTerminating=%d)", isTerminatingApp ? 1 : 0)
         }
     }
 
