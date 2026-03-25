@@ -273,6 +273,125 @@ fi
 # Cleanup
 pkill -f "nsmux.app" 2>/dev/null || true
 
+# ─── Test 5: Pi session restore ──────────────────────────────────────────
+
+info "Test 5: Pi session restore command survives and launches"
+
+sleep 2
+
+# Find a real pi session file
+PI_PATH="$HOME/.nvm/versions/node/v24.13.1/bin/pi"
+SESSION_FILE=$(ls -t "$HOME/.pi/agent/sessions/--Users-nodeselector--/"*.jsonl 2>/dev/null | head -1)
+
+if [[ -z "$SESSION_FILE" ]] || [[ ! -f "$PI_PATH" ]]; then
+    info "Skipping pi test (pi=$PI_PATH session=$SESSION_FILE)"
+else
+    # Escape for JSON
+    PI_CMD="$PI_PATH --session '${SESSION_FILE//\'/\'\\\"\'\\\"\'}'"
+
+    cat > "$SNAPSHOT_FILE" << PISNAP
+{
+  "createdAt": 1774390000,
+  "version": 1,
+  "windows": [{
+    "display": {"displayID": 4, "frame": {"height": 1440, "width": 5120, "x": 0, "y": 0}, "visibleFrame": {"height": 1415, "width": 5064, "x": 56, "y": 0}},
+    "frame": {"height": 1000, "width": 1600, "x": 200, "y": 200},
+    "sidebar": {"isVisible": true, "selection": "tabs", "width": 200},
+    "tabManager": {
+      "selectedWorkspaceIndex": 0,
+      "workspaces": [{
+        "currentDirectory": "/Users/nodeselector",
+        "isPinned": false,
+        "layout": {
+          "type": "split",
+          "split": {
+            "orientation": "horizontal",
+            "dividerPosition": 0.5,
+            "first": {"type": "pane", "pane": {"panelIds": ["CCCC0001-0000-0000-0000-000000000001"], "selectedPanelId": "CCCC0001-0000-0000-0000-000000000001"}},
+            "second": {"type": "pane", "pane": {"panelIds": ["CCCC0002-0000-0000-0000-000000000002"], "selectedPanelId": "CCCC0002-0000-0000-0000-000000000002"}}
+          }
+        },
+        "panels": [
+          {"id": "CCCC0001-0000-0000-0000-000000000001", "type": "terminal", "title": "pi-test", "isPinned": false, "isManuallyUnread": false, "listeningPorts": [], "terminal": {"workingDirectory": "/Users/nodeselector", "restoreCommand": "$PI_CMD"}},
+          {"id": "CCCC0002-0000-0000-0000-000000000002", "type": "terminal", "title": "shell-test", "isPinned": false, "isManuallyUnread": false, "listeningPorts": [], "terminal": {"workingDirectory": "/Users/nodeselector"}}
+        ],
+        "processTitle": "pi-restore-test",
+        "logEntries": [],
+        "statusEntries": []
+      }]
+    }
+  }]
+}
+PISNAP
+
+    open "$APP"
+    sleep 10
+
+    # Check: 2 panels restored
+    PI_PANEL_COUNT=$(python3 -c "
+import json
+with open('$SNAPSHOT_FILE') as f:
+    d = json.load(f)
+print(len(d['windows'][0]['tabManager']['workspaces'][0]['panels']))
+")
+    if [[ "$PI_PANEL_COUNT" -ge 2 ]]; then
+        pass "Pi layout restored: $PI_PANEL_COUNT panels"
+    else
+        fail "Pi layout degraded: $PI_PANEL_COUNT panels (expected 2)"
+    fi
+
+    # Check: pi process is running
+    if pgrep -f "pi.*--session" > /dev/null 2>&1; then
+        pass "Pi session process is running"
+    else
+        # Also check node since pi is a node script
+        if pgrep -f "pi-coding-agent" > /dev/null 2>&1; then
+            pass "Pi session process is running (node)"
+        else
+            fail "Pi session process not found"
+        fi
+    fi
+
+    # Check: snapshot survives quit
+    sleep 8  # wait for autosave
+    cp "$SNAPSHOT_FILE" "$BACKUP_FILE"
+    BEFORE_PI_PANELS=$(python3 -c "
+import json
+with open('$BACKUP_FILE') as f:
+    d = json.load(f)
+print(len(d['windows'][0]['tabManager']['workspaces'][0]['panels']))
+")
+
+    pkill -f "nsmux.app" 2>/dev/null || true
+    sleep 3
+
+    AFTER_PI_PANELS=$(python3 -c "
+import json
+with open('$SNAPSHOT_FILE') as f:
+    d = json.load(f)
+print(len(d['windows'][0]['tabManager']['workspaces'][0]['panels']))
+")
+
+    if [[ "$AFTER_PI_PANELS" -ge "$BEFORE_PI_PANELS" ]]; then
+        pass "Pi snapshot survived quit ($AFTER_PI_PANELS >= $BEFORE_PI_PANELS panels)"
+    else
+        fail "Pi snapshot clobbered on quit ($AFTER_PI_PANELS < $BEFORE_PI_PANELS panels)"
+    fi
+
+    # Check: second restore with pi
+    sleep 2
+    open "$APP"
+    sleep 10
+
+    if pgrep -f "pi.*--session" > /dev/null 2>&1 || pgrep -f "pi-coding-agent" > /dev/null 2>&1; then
+        pass "Pi session restored on second launch"
+    else
+        fail "Pi session not restored on second launch"
+    fi
+
+    pkill -f "nsmux.app" 2>/dev/null || true
+fi
+
 # ─── Summary ──────────────────────────────────────────────────────────────
 
 echo ""
