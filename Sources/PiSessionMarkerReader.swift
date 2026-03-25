@@ -86,22 +86,11 @@ enum PiSessionMarkerReader {
     }
     
     private static func buildRestoreCommand(from marker: PiSessionMarker) -> String {
-        // Escape the session file path for use inside double quotes in a shell command.
-        // We need to escape: backslash, double-quote, dollar, backtick
-        let shellEscaped = marker.sessionFile
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "$", with: "\\$")
-            .replacingOccurrences(of: "`", with: "\\`")
-        
-        // Ghostty wraps .shell commands as:
-        //   /usr/bin/login -flp <user> /bin/bash --noprofile --norc -c "exec -l <command>"
-        // That bare bash has no PATH setup (no rc files), so nvm/node/npm aren't available.
-        //
-        // Solution: launch zsh as a login+interactive shell. This loads .zshenv/.zprofile/.zshrc
-        // which sets up PATH including nvm. Then exec pi from inside that fully-configured env.
-        // The exec replaces the zsh process so there's no extra parent process hanging around.
-        return "/bin/zsh -lic \"exec pi --session '\(shellEscaped)'\""
+        // The restore command is now typed into a normal login shell (not passed as
+        // ghostty's initialCommand). The shell already has PATH set up (nvm, etc.),
+        // so we just need a simple pi invocation with proper quoting.
+        let escaped = marker.sessionFile.replacingOccurrences(of: "'", with: "'\"'\"'")
+        return "exec pi --session '\(escaped)'"
     }
     
     

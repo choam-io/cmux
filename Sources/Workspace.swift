@@ -612,12 +612,16 @@ extension Workspace {
                 for: snapshot.terminal?.scrollback
             )
             let restoreCommand = snapshot.terminal?.restoreCommand
+            // Don't pass restoreCommand as initialCommand to ghostty. The ghostty
+            // initialCommand path (surfaceConfig.command -> .shell -> exec -l) doesn't
+            // work reliably when launched from Raycast/Finder. Instead, let the terminal
+            // open a normal login shell, then send the command as typed input once ready.
             guard let terminalPanel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
                 workingDirectory: workingDirectory,
                 startupEnvironment: replayEnvironment,
-                initialCommand: restoreCommand
+                initialCommand: nil
             ) else {
                 return nil
             }
@@ -625,6 +629,14 @@ extension Workspace {
             // markers by surface ID (which changes on every nsmux restart).
             if let restoreCommand = restoreCommand {
                 cachedRestoreCommandByPanelId[terminalPanel.id] = restoreCommand
+            }
+            // Send the restore command as text input after the shell is ready.
+            // This bypasses ghostty's command mechanism entirely and just types
+            // the command into the login shell, which works regardless of how
+            // nsmux was launched (terminal, Raycast, Finder, etc.).
+            if let restoreCommand = restoreCommand {
+                let panelId = terminalPanel.id
+                sendRestoreCommandWhenReady(restoreCommand, panelId: panelId)
             }
             let fallbackScrollback = SessionPersistencePolicy.truncatedScrollback(snapshot.terminal?.scrollback)
             if let fallbackScrollback {
@@ -657,6 +669,28 @@ extension Workspace {
             applySessionPanelMetadata(snapshot, toPanelId: markdownPanel.id)
             return markdownPanel.id
         }
+    }
+
+    /// Send a restore command to a terminal panel after its surface is ready.
+    /// Polls until the panel's ghostty surface exists, then sends the command as text input.
+    private func sendRestoreCommandWhenReady(_ command: String, panelId: UUID, attempt: Int = 0) {
+        let maxAttempts = 30  // 30 * 100ms = 3s max wait
+        guard attempt < maxAttempts else {
+            NSLog("[Workspace] sendRestoreCommand: gave up after %d attempts for panel %@", maxAttempts, panelId.uuidString)
+            return
+        }
+        
+        guard let panel = panels[panelId] as? TerminalPanel,
+              panel.surface.surface != nil else {
+            // Surface not ready yet, retry after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.sendRestoreCommandWhenReady(command, panelId: panelId, attempt: attempt + 1)
+            }
+            return
+        }
+        
+        NSLog("[Workspace] sendRestoreCommand: sending to panel %@ (attempt %d): %@", panelId.uuidString, attempt, command)
+        panel.sendText(command + "\n")
     }
 
     private func applySessionPanelMetadata(_ snapshot: SessionPanelSnapshot, toPanelId panelId: UUID) {
