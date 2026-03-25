@@ -61,7 +61,10 @@ enum SocketControlMode: String, CaseIterable, Identifiable {
 }
 
 enum SocketControlPasswordStore {
-    static let directoryName = "cmux"
+    static let directoryName: String = {
+        let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleExecutable") as? String
+        return name?.lowercased() ?? "cmux"
+    }()
     static let fileName = "socket-control-password"
     private static let keychainMigrationDefaultsKey = "socketControlPasswordMigrationVersion"
     private static let keychainMigrationVersion = 1
@@ -293,11 +296,23 @@ struct SocketControlSettings {
     static let socketPasswordEnvKey = "CMUX_SOCKET_PASSWORD"
     static let launchTagEnvKey = "CMUX_TAG"
     static let baseDebugBundleIdentifier = "com.cmuxterm.app.debug"
-    private static let socketDirectoryName = "cmux"
-    private static let stableSocketFileName = "cmux.sock"
+    private static let socketDirectoryName: String = {
+        // Use app name for socket directory so nsmux and cmux don't collide
+        let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleExecutable") as? String
+        return name?.lowercased() ?? "cmux"
+    }()
+    private static let stableSocketFileName: String = {
+        let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleExecutable") as? String
+        return "\(name?.lowercased() ?? "cmux").sock"
+    }()
     private static let lastSocketPathFileName = "last-socket-path"
-    static let legacyStableDefaultSocketPath = "/tmp/cmux.sock"
-    static let legacyLastSocketPathFile = "/tmp/cmux-last-socket-path"
+    static let legacyStableDefaultSocketPath: String = "/tmp/\(appName).sock"
+    static let legacyLastSocketPathFile: String = "/tmp/\(appName)-last-socket-path"
+
+    private static let appName: String = {
+        let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleExecutable") as? String
+        return name?.lowercased() ?? "cmux"
+    }()
 
     static var stableDefaultSocketPath: String {
         stableSocketFileURL()?.path ?? legacyStableDefaultSocketPath
@@ -471,13 +486,13 @@ struct SocketControlSettings {
             return taggedDebugPath
         }
         if bundleIdentifier == "com.cmuxterm.app.nightly" {
-            return "/tmp/cmux-nightly.sock"
+            return "/tmp/\(appName)-nightly.sock"
         }
         if isDebugLikeBundleIdentifier(bundleIdentifier) || isDebugBuild {
-            return "/tmp/cmux-debug.sock"
+            return "/tmp/\(appName)-debug.sock"
         }
         if isStagingBundleIdentifier(bundleIdentifier) {
-            return "/tmp/cmux-staging.sock"
+            return "/tmp/\(appName)-staging.sock"
         }
         return resolvedStableDefaultSocketPath(
             currentUserID: currentUserID,
@@ -487,8 +502,8 @@ struct SocketControlSettings {
 
     static func userScopedStableSocketPath(currentUserID: uid_t = getuid()) -> String {
         stableSocketDirectoryURL()?
-            .appendingPathComponent("cmux-\(currentUserID).sock", isDirectory: false)
-            .path ?? "/tmp/cmux-\(currentUserID).sock"
+            .appendingPathComponent("\(appName)-\(currentUserID).sock", isDirectory: false)
+            .path ?? "/tmp/\(appName)-\(currentUserID).sock"
     }
 
     static func resolvedStableDefaultSocketPath(
@@ -544,7 +559,7 @@ struct SocketControlSettings {
                 .replacingOccurrences(of: ".", with: "-")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
             if !slug.isEmpty {
-                return "/tmp/cmux-debug-\(slug).sock"
+                return "/tmp/(appName)-debug-\(slug).sock"
             }
         }
 
@@ -561,7 +576,7 @@ struct SocketControlSettings {
               !tag.isEmpty else {
             return nil
         }
-        return "/tmp/cmux-debug-\(tag).sock"
+        return "/tmp/(appName)-debug-\(tag).sock"
     }
 
     static func isStagingBundleIdentifier(_ bundleIdentifier: String?) -> Bool {

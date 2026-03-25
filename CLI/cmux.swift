@@ -591,7 +591,7 @@ enum SocketPasswordResolver {
         }
 
         let candidate = URL(fileURLWithPath: socketPath).lastPathComponent
-        let prefixes = ["cmux-debug-", "cmux-"]
+        let prefixes = ["(cliName)-debug-", "(cliName)-", "cmux-debug-", "cmux-"]
         for prefix in prefixes {
             guard candidate.hasPrefix(prefix), candidate.hasSuffix(".sock") else { continue }
             let start = candidate.index(candidate.startIndex, offsetBy: prefix.count)
@@ -660,13 +660,18 @@ private enum CLISocketPathSource {
 }
 
 private enum CLISocketPathResolver {
-    private static let appSupportDirectoryName = "cmux"
-    private static let stableSocketFileName = "cmux.sock"
+    private static let cliName: String = {
+        // Derive from binary name: "nsmux" -> nsmux paths, "cmux" -> cmux paths
+        let name = ProcessInfo.processInfo.processName.lowercased()
+        return (name == "nsmux" || name == "cmux") ? name : "cmux"
+    }()
+    private static let appSupportDirectoryName: String = cliName
+    private static let stableSocketFileName: String = "\(cliName).sock"
     private static let lastSocketPathFileName = "last-socket-path"
-    static let legacyDefaultSocketPath = "/tmp/cmux.sock"
-    private static let fallbackSocketPath = "/tmp/cmux-debug.sock"
-    private static let stagingSocketPath = "/tmp/cmux-staging.sock"
-    private static let legacyLastSocketPathFile = "/tmp/cmux-last-socket-path"
+    static let legacyDefaultSocketPath: String = "/tmp/\(cliName).sock"
+    private static let fallbackSocketPath: String = "/tmp/\(cliName)-debug.sock"
+    private static let stagingSocketPath: String = "/tmp/\(cliName)-staging.sock"
+    private static let legacyLastSocketPathFile: String = "/tmp/\(cliName)-last-socket-path"
 
     static var defaultSocketPath: String {
         let stablePath: String? = stableSocketDirectoryURL()?
@@ -708,8 +713,8 @@ private enum CLISocketPathResolver {
 
         if let tag = normalized(environment["CMUX_TAG"]) {
             let slug = sanitizeTagSlug(tag)
-            candidates.append("/tmp/cmux-debug-\(slug).sock")
-            candidates.append("/tmp/cmux-\(slug).sock")
+            candidates.append("/tmp/(cliName)-debug-\(slug).sock")
+            candidates.append("/tmp/(cliName)-\(slug).sock")
         }
 
         candidates.append(requestedPath)
@@ -1251,7 +1256,7 @@ enum CLIProcessRunner {
 struct CMUXCLI {
     let args: [String]
 
-    private static let debugLastSocketHintPath = "/tmp/cmux-last-socket-path"
+    private static let debugLastSocketHintPath = "/tmp/(cliName)-last-socket-path"
 
     private static func normalizedEnvValue(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1273,7 +1278,7 @@ struct CMUXCLI {
             return nil
         }
         guard let hinted = normalizedEnvValue(raw),
-              hinted.hasPrefix("/tmp/cmux-debug"),
+              hinted.hasPrefix("/tmp/(cliName)-debug"),
               hinted.hasSuffix(".sock"),
               pathIsSocket(hinted) else {
             return nil
@@ -1292,9 +1297,9 @@ struct CMUXCLI {
         if let hinted = debugSocketPathFromHintFile() {
             return hinted
         }
-        return "/tmp/cmux-debug.sock"
+        return "/tmp/(cliName)-debug.sock"
 #else
-        return "/tmp/cmux.sock"
+        return "/tmp/(cliName).sock"
 #endif
     }
 
