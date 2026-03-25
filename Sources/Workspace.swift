@@ -672,9 +672,10 @@ extension Workspace {
     }
 
     /// Send a restore command to a terminal panel after its surface is ready.
-    /// Polls until the panel's ghostty surface exists, then sends the command as text input.
+    /// Waits for the ghostty surface to exist, then adds a delay for the shell
+    /// to finish loading rc files and display its first prompt.
     private func sendRestoreCommandWhenReady(_ command: String, panelId: UUID, attempt: Int = 0) {
-        let maxAttempts = 30  // 30 * 100ms = 3s max wait
+        let maxAttempts = 30  // 30 * 100ms = 3s max wait for surface
         guard attempt < maxAttempts else {
             NSLog("[Workspace] sendRestoreCommand: gave up after %d attempts for panel %@", maxAttempts, panelId.uuidString)
             return
@@ -689,8 +690,16 @@ extension Workspace {
             return
         }
         
-        NSLog("[Workspace] sendRestoreCommand: sending to panel %@ (attempt %d): %@", panelId.uuidString, attempt, command)
-        panel.sendText(command + "\n")
+        // Surface exists but the shell inside it needs time to initialize
+        // (load .zshrc, nvm, prompt theme, etc.). Wait for the shell to be
+        // ready before sending the command. 1.5s covers typical shell startup
+        // including heavy setups like powerlevel10k + nvm.
+        NSLog("[Workspace] sendRestoreCommand: surface ready for panel %@, waiting for shell init", panelId.uuidString)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, let panel = self.panels[panelId] as? TerminalPanel else { return }
+            NSLog("[Workspace] sendRestoreCommand: sending to panel %@: %@", panelId.uuidString, command)
+            panel.sendText(command + "\n")
+        }
     }
 
     private func applySessionPanelMetadata(_ snapshot: SessionPanelSnapshot, toPanelId panelId: UUID) {
