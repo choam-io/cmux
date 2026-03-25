@@ -97,6 +97,11 @@ enum PiSessionMarkerReader {
         // Try to find pi in nvm first (most likely for this user).
         // We must prepend the nvm bin/ dir to PATH so that node, npm, and any
         // other tools pi spawns (npm root -g, etc.) are all available.
+        //
+        // IMPORTANT: ghostty wraps .shell commands as:
+        //   /usr/bin/login -flp <user> /bin/bash --noprofile --norc -c "exec -l <command>"
+        // So the command must be a single simple command -- no &&, no export, no compound
+        // statements. We use env(1) to set PATH and exec pi in one shot.
         let nvmBase = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/versions/node")
         if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmBase.path) {
             for version in versions.sorted().reversed() {  // prefer newest
@@ -106,10 +111,11 @@ enum PiSessionMarkerReader {
                 if FileManager.default.fileExists(atPath: piPath) &&
                    FileManager.default.fileExists(atPath: nodePath) {
                     NSLog("[PiSessionMarker] Using nvm bin dir: %@", binDir)
-                    // Export PATH with nvm bin prepended, then exec pi.
-                    // This ensures pi and all its child processes (npm, node, etc.)
-                    // can find everything they need.
-                    return "export PATH='\(binDir)':\"$PATH\" && exec '\(piPath)' --session '\(escapedPath)'"
+                    // Use /usr/bin/env to set PATH and exec pi in a single command.
+                    // env(1) replaces the current process with the given command,
+                    // and the PATH= argument ensures node/npm/etc are all findable.
+                    let currentPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+                    return "/usr/bin/env PATH='\(binDir):\(currentPath)' '\(piPath)' --session '\(escapedPath)'"
                 }
             }
         }
@@ -117,9 +123,7 @@ enum PiSessionMarkerReader {
         // Try other common locations
         for path in ["/opt/homebrew/bin/pi", "/usr/local/bin/pi"] {
             if FileManager.default.fileExists(atPath: path) {
-                let binDir = (path as NSString).deletingLastPathComponent
-                // Prepend the bin dir to PATH for the same reason as nvm above
-                return "export PATH='\(binDir)':\"$PATH\" && exec '\(path)' --session '\(escapedPath)'"
+                return "\(path) --session '\(escapedPath)'"
             }
         }
         
