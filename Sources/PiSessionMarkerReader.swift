@@ -86,49 +86,22 @@ enum PiSessionMarkerReader {
     }
     
     private static func buildRestoreCommand(from marker: PiSessionMarker) -> String {
-        // Use shell quoting for the session file path
-        let escapedPath = marker.sessionFile.replacingOccurrences(of: "'", with: "'\"'\"'")
+        // Escape the session file path for use inside double quotes in a shell command.
+        // We need to escape: backslash, double-quote, dollar, backtick
+        let shellEscaped = marker.sessionFile
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "$", with: "\\$")
+            .replacingOccurrences(of: "`", with: "\\`")
         
-        // The restore command runs via /bin/sh -c (ghostty embedded API behavior).
-        // /bin/sh doesn't load .zshrc/.bash_profile, so nvm isn't configured and
-        // `node` isn't in PATH. Since pi's shebang is #!/usr/bin/env node, we must
-        // invoke node explicitly with its full path to bypass the shebang resolution.
-        
-        // Try to find pi in nvm first (most likely for this user).
-        // We must prepend the nvm bin/ dir to PATH so that node, npm, and any
-        // other tools pi spawns (npm root -g, etc.) are all available.
-        //
-        // IMPORTANT: ghostty wraps .shell commands as:
+        // Ghostty wraps .shell commands as:
         //   /usr/bin/login -flp <user> /bin/bash --noprofile --norc -c "exec -l <command>"
-        // So the command must be a single simple command -- no &&, no export, no compound
-        // statements. We use env(1) to set PATH and exec pi in one shot.
-        let nvmBase = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/versions/node")
-        if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmBase.path) {
-            for version in versions.sorted().reversed() {  // prefer newest
-                let binDir = nvmBase.appendingPathComponent("\(version)/bin").path
-                let piPath = "\(binDir)/pi"
-                let nodePath = "\(binDir)/node"
-                if FileManager.default.fileExists(atPath: piPath) &&
-                   FileManager.default.fileExists(atPath: nodePath) {
-                    NSLog("[PiSessionMarker] Using nvm bin dir: %@", binDir)
-                    // Use /usr/bin/env to set PATH and exec pi in a single command.
-                    // env(1) replaces the current process with the given command,
-                    // and the PATH= argument ensures node/npm/etc are all findable.
-                    let currentPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
-                    return "/usr/bin/env PATH='\(binDir):\(currentPath)' '\(piPath)' --session '\(escapedPath)'"
-                }
-            }
-        }
-        
-        // Try other common locations
-        for path in ["/opt/homebrew/bin/pi", "/usr/local/bin/pi"] {
-            if FileManager.default.fileExists(atPath: path) {
-                return "\(path) --session '\(escapedPath)'"
-            }
-        }
-        
-        // Fallback: use pi and hope it's in PATH (won't work for initial commands)
-        return "pi --session '\(escapedPath)'"
+        // That bare bash has no PATH setup (no rc files), so nvm/node/npm aren't available.
+        //
+        // Solution: launch zsh as a login+interactive shell. This loads .zshenv/.zprofile/.zshrc
+        // which sets up PATH including nvm. Then exec pi from inside that fully-configured env.
+        // The exec replaces the zsh process so there's no extra parent process hanging around.
+        return "/bin/zsh -lic \"exec pi --session '\(shellEscaped)'\""
     }
     
     
