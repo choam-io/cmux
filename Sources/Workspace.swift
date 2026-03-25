@@ -698,7 +698,7 @@ extension Workspace {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self, let panel = self.panels[panelId] as? TerminalPanel else { return }
             NSLog("[Workspace] sendRestoreCommand: sending to panel %@: %@", panelId.uuidString, command)
-            panel.sendText(command + "\n")
+            panel.sendText(command + "\r")
         }
     }
 
