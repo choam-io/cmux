@@ -88,35 +88,81 @@ enum PiSessionMarkerReader {
     private static func buildRestoreCommand(from marker: PiSessionMarker) -> String {
         // Use shell quoting for the session file path
         let escapedPath = marker.sessionFile.replacingOccurrences(of: "'", with: "'\"'\"'")
-        // Use full path to pi since initial commands run before shell rc files
-        // Common locations: nvm, homebrew, direct install
-        let piPaths = [
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/versions/node").path,
-            "/opt/homebrew/bin/pi",
-            "/usr/local/bin/pi",
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/pi").path
-        ]
         
-        // Try to find pi in nvm first (most likely for this user)
+        // The restore command runs via /bin/sh -c (ghostty embedded API behavior).
+        // /bin/sh doesn't load .zshrc/.bash_profile, so nvm isn't configured and
+        // `node` isn't in PATH. Since pi's shebang is #!/usr/bin/env node, we must
+        // invoke node explicitly with its full path to bypass the shebang resolution.
+        
+        // Try to find pi (and node) in nvm first (most likely for this user)
         let nvmBase = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/versions/node")
         if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmBase.path) {
             for version in versions.sorted().reversed() {  // prefer newest
                 let piPath = nvmBase.appendingPathComponent("\(version)/bin/pi").path
-                if FileManager.default.fileExists(atPath: piPath) {
-                    return "\(piPath) --session '\(escapedPath)'"
+                let nodePath = nvmBase.appendingPathComponent("\(version)/bin/node").path
+                if FileManager.default.fileExists(atPath: piPath) &&
+                   FileManager.default.fileExists(atPath: nodePath) {
+                    // Use node explicitly to avoid #!/usr/bin/env node shebang failing
+                    // in the minimal /bin/sh environment where node isn't in PATH
+                    NSLog("[PiSessionMarker] Using nvm node: %@, pi: %@", nodePath, piPath)
+                    return "\(nodePath) \(piPath) --session '\(escapedPath)'"
                 }
             }
         }
         
-        // Try other common locations
+        // Try other common locations -- these are typically native binaries or
+        // have node available system-wide, but check for env-node shebangs anyway
         for path in ["/opt/homebrew/bin/pi", "/usr/local/bin/pi"] {
             if FileManager.default.fileExists(atPath: path) {
+                if let nodePath = resolveNodeForScript(atPath: path) {
+                    return "\(nodePath) \(path) --session '\(escapedPath)'"
+                }
                 return "\(path) --session '\(escapedPath)'"
             }
         }
         
         // Fallback: use pi and hope it's in PATH (won't work for initial commands)
         return "pi --session '\(escapedPath)'"
+    }
+    
+    /// If a script uses #!/usr/bin/env node, find the actual node binary.
+    /// Returns nil if the script doesn't need node or node can't be found.
+    private static func resolveNodeForScript(atPath scriptPath: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: scriptPath),
+              let firstLine = String(data: data.prefix(256), encoding: .utf8)?
+                .components(separatedBy: .newlines).first else {
+            return nil
+        }
+        
+        // Only handle #!/usr/bin/env node shebangs
+        guard firstLine.hasPrefix("#!") && firstLine.contains("env") && firstLine.contains("node") else {
+            return nil
+        }
+        
+        // Check common node locations
+        let candidateNodePaths = [
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+        ]
+        
+        // Also check nvm
+        let nvmBase = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/versions/node")
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmBase.path) {
+            for version in versions.sorted().reversed() {
+                let nodePath = nvmBase.appendingPathComponent("\(version)/bin/node").path
+                if FileManager.default.fileExists(atPath: nodePath) {
+                    return nodePath
+                }
+            }
+        }
+        
+        for nodePath in candidateNodePaths {
+            if FileManager.default.fileExists(atPath: nodePath) {
+                return nodePath
+            }
+        }
+        
+        return nil
     }
     
     private static func isProcessRunning(pid: Int) -> Bool {
