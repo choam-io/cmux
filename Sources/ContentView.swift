@@ -19,6 +19,152 @@ private extension Color {
     }
 }
 
+// MARK: - Session Restore Overlay
+
+private struct SessionRestoreOverlay: View {
+    let isRestoring: Bool
+    // This SwiftUI view just manages the lifecycle. The actual overlay
+    // is an NSPanel child window so it renders above ghostty's Metal layers.
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .background(SessionRestoreOverlayBridge(isRestoring: isRestoring))
+    }
+}
+
+private struct SessionRestoreOverlayBridge: NSViewRepresentable {
+    let isRestoring: Bool
+
+    func makeNSView(context: Context) -> SessionRestoreOverlayAnchorView {
+        SessionRestoreOverlayAnchorView()
+    }
+
+    func updateNSView(_ nsView: SessionRestoreOverlayAnchorView, context: Context) {
+        if isRestoring {
+            nsView.showOverlay()
+        } else {
+            nsView.hideOverlay()
+        }
+    }
+}
+
+private final class SessionRestoreOverlayAnchorView: NSView {
+    private var overlayPanel: NSPanel?
+
+    func showOverlay() {
+        guard overlayPanel == nil, let parentWindow = window else { return }
+
+        let panel = NSPanel(
+            contentRect: parentWindow.frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.backgroundColor = .clear
+        panel.level = parentWindow.level
+        panel.ignoresMouseEvents = false
+        panel.collectionBehavior = [.fullScreenAuxiliary]
+
+        let hostingView = NSHostingView(rootView: SessionRestoreOverlayContent())
+        hostingView.frame = panel.contentView!.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        panel.contentView?.addSubview(hostingView)
+
+        parentWindow.addChildWindow(panel, ordered: .above)
+        panel.setFrame(parentWindow.frame, display: true)
+        overlayPanel = panel
+
+        // Animate in
+        panel.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            panel.animator().alphaValue = 1
+        }
+    }
+
+    func hideOverlay() {
+        guard let panel = overlayPanel else { return }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
+            self?.overlayPanel = nil
+        })
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Track parent window frame changes to keep overlay sized correctly.
+        if let parentWindow = window {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(parentWindowDidResize),
+                name: NSWindow.didResizeNotification,
+                object: parentWindow
+            )
+        }
+    }
+
+    @objc private func parentWindowDidResize(_ notification: Notification) {
+        guard let parentWindow = notification.object as? NSWindow,
+              let panel = overlayPanel else { return }
+        panel.setFrame(parentWindow.frame, display: true)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        if let panel = overlayPanel {
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
+        }
+    }
+}
+
+private struct SessionRestoreOverlayContent: View {
+    @State private var dotCount = 0
+    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+
+    private var dots: String {
+        String(repeating: ".", count: dotCount + 1)
+    }
+
+    var body: some View {
+        ZStack {
+            // Match the user's terminal background for a seamless feel.
+            Color(nsColor: GhosttyApp.shared.defaultBackgroundColor)
+
+            VStack(spacing: 20) {
+                // App icon
+                if let appIcon = NSApp.applicationIconImage {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .frame(width: 64, height: 64)
+                        .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
+                }
+
+                VStack(spacing: 8) {
+                    Text("Restoring session\(dots)")
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 200, alignment: .leading)
+                        .onReceive(timer) { _ in
+                            dotCount = (dotCount + 1) % 3
+                        }
+
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white.opacity(0.4))
+                }
+            }
+        }
+    }
+}
+
 private func coloredCircleImage(color: NSColor) -> NSImage {
     let size = NSSize(width: 14, height: 14)
     let image = NSImage(size: size, flipped: false) { rect in
@@ -3202,6 +3348,10 @@ struct ContentView: View {
             )
             installFileDropOverlay(on: window, tabManager: tabManager)
         }))
+
+        view = AnyView(view.overlay {
+            SessionRestoreOverlay(isRestoring: tabManager.isRestoringSession)
+        })
 
         return view
     }

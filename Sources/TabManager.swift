@@ -691,6 +691,7 @@ class TabManager: ObservableObject {
 
     @Published var tabs: [Workspace] = []
     @Published private(set) var isWorkspaceCycleHot: Bool = false
+    @Published private(set) var isRestoringSession: Bool = false
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
     @Published private(set) var debugPinnedWorkspaceLoadIds: Set<UUID> = []
 
@@ -5632,11 +5633,15 @@ extension TabManager {
         if !workspacesNeedingRestore.isEmpty {
             NSLog("[TabManager] restoreSession: %d non-selected workspace(s) need restore, cycling through them",
                   workspacesNeedingRestore.count)
-            scheduleRestoreCycle(
-                workspaces: workspacesNeedingRestore.map(\.id),
-                returnTo: newSelectedId,
-                index: 0
-            )
+            isRestoringSession = true
+            // Brief delay so the overlay panel renders before workspace cycling begins.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.scheduleRestoreCycle(
+                    workspaces: workspacesNeedingRestore.map(\.id),
+                    returnTo: newSelectedId,
+                    index: 0
+                )
+            }
         }
     }
 
@@ -5646,10 +5651,16 @@ extension TabManager {
     /// original workspace when done.
     private func scheduleRestoreCycle(workspaces: [UUID], returnTo: UUID?, index: Int) {
         guard index < workspaces.count else {
-            // All done -- switch back to the originally selected workspace.
+            // All non-selected workspaces done -- switch back to the original.
             if let returnTo, tabs.contains(where: { $0.id == returnTo }) {
                 NSLog("[TabManager] restoreCycle: complete, returning to workspace %@", returnTo.uuidString)
                 selectedTabId = returnTo
+            }
+            // Wait for the returned-to workspace's own drain to complete
+            // (surface mount + 1.5s shell init + settle buffer) before
+            // dismissing the overlay.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in
+                self?.isRestoringSession = false
             }
             return
         }
