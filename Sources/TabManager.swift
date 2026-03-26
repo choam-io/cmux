@@ -864,6 +864,23 @@ class TabManager: ObservableObject {
                 dismissPanelNotificationOnFocusIfActive(tabId: tabId, panelId: surfaceId)
             }
         })
+        // When a terminal surface becomes ready, drain any pending restore commands.
+        // Non-selected workspaces are not mounted during session restore, so their
+        // surfaces don't exist yet. The restore command is parked and sent here when
+        // the workspace is first selected and the surface is finally created.
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .terminalSurfaceDidBecomeReady,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated { [weak self] in
+                guard let self else { return }
+                guard let workspaceId = notification.userInfo?["workspaceId"] as? UUID,
+                      let surfaceId = notification.userInfo?["surfaceId"] as? UUID else { return }
+                guard let workspace = self.tabs.first(where: { $0.id == workspaceId }) else { return }
+                workspace.drainPendingRestoreCommand(forSurfaceId: surfaceId)
+            }
+        })
 
         startAgentPIDSweepTimer()
         startWorkspaceGitMetadataPollTimer()
@@ -5533,7 +5550,11 @@ extension TabManager {
         var newTabs: [Workspace] = []
         let workspaceSnapshots = snapshot.workspaces
             .prefix(SessionPersistencePolicy.maxWorkspacesPerWindow)
-        for workspaceSnapshot in workspaceSnapshots {
+        for (index, workspaceSnapshot) in workspaceSnapshots.enumerated() {
+            let terminalCount = workspaceSnapshot.panels.filter { $0.type == .terminal }.count
+            let restoreCount = workspaceSnapshot.panels.filter { $0.terminal?.restoreCommand != nil }.count
+            NSLog("[TabManager] restoreSession: workspace %d '%@' panels=%d terminals=%d withRestoreCmd=%d",
+                  index, workspaceSnapshot.processTitle, workspaceSnapshot.panels.count, terminalCount, restoreCount)
             let ordinal = Self.nextPortOrdinal
             Self.nextPortOrdinal += 1
             let workspace = Workspace(
@@ -5543,6 +5564,8 @@ extension TabManager {
             )
             workspace.owningTabManager = self
             workspace.restoreSessionSnapshot(workspaceSnapshot)
+            NSLog("[TabManager] restoreSession: workspace %d hasPendingRestoreCommands=%d",
+                  index, workspace.hasPendingRestoreCommands ? 1 : 0)
             wireClosedBrowserTracking(for: workspace)
             newTabs.append(workspace)
         }
@@ -5595,6 +5618,57 @@ extension TabManager {
                 object: nil,
                 userInfo: [GhosttyNotificationKey.tabId: selectedTabId]
             )
+        }
+
+        // Briefly select each non-selected workspace that has pending restore
+        // commands so it gets fully mounted (proper terminal size, live shell).
+        // The park/drain mechanism fires once the surface is ready. After all
+        // workspaces have been visited, switch back to the originally selected
+        // workspace. This avoids the background-prime path whose 0.001-opacity
+        // surfaces don't provide a functional shell environment.
+        let workspacesNeedingRestore = newTabs.filter {
+            $0.id != newSelectedId && $0.hasPendingRestoreCommands
+        }
+        if !workspacesNeedingRestore.isEmpty {
+            NSLog("[TabManager] restoreSession: %d non-selected workspace(s) need restore, cycling through them",
+                  workspacesNeedingRestore.count)
+            scheduleRestoreCycle(
+                workspaces: workspacesNeedingRestore.map(\.id),
+                returnTo: newSelectedId,
+                index: 0
+            )
+        }
+    }
+
+    /// Cycle through workspaces that need restore commands sent. Selects each
+    /// workspace briefly (so it mounts at full size with a real shell), waits
+    /// for the drain to complete, then moves to the next. Returns to the
+    /// original workspace when done.
+    private func scheduleRestoreCycle(workspaces: [UUID], returnTo: UUID?, index: Int) {
+        guard index < workspaces.count else {
+            // All done -- switch back to the originally selected workspace.
+            if let returnTo, tabs.contains(where: { $0.id == returnTo }) {
+                NSLog("[TabManager] restoreCycle: complete, returning to workspace %@", returnTo.uuidString)
+                selectedTabId = returnTo
+            }
+            return
+        }
+
+        let workspaceId = workspaces[index]
+        guard let workspace = tabs.first(where: { $0.id == workspaceId }),
+              workspace.hasPendingRestoreCommands else {
+            // Skip -- already drained or removed.
+            scheduleRestoreCycle(workspaces: workspaces, returnTo: returnTo, index: index + 1)
+            return
+        }
+
+        NSLog("[TabManager] restoreCycle: selecting workspace %@ (%d/%d)", workspaceId.uuidString, index + 1, workspaces.count)
+        selectedTabId = workspaceId
+
+        // Wait for surfaces to create + 1.5s shell init + 0.5s buffer, then move on.
+        // The drain fires via .terminalSurfaceDidBecomeReady notification while mounted.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.scheduleRestoreCycle(workspaces: workspaces, returnTo: returnTo, index: index + 1)
         }
     }
 }

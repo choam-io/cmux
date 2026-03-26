@@ -3959,7 +3959,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
         var previousWasCR = false
         for scalar in text.unicodeScalars {
             switch scalar.value {
-            case 0x0A: // \n — skip if preceded by \r (already sent Return)
+            case 0x0A: // 
+ — skip if preceded by  (already sent Return)
                 if !previousWasCR {
                     flushText(&bufferedText, surface: surface)
                     sendKeyEvent(surface: surface, keycode: 0x24) // kVK_Return
@@ -3983,6 +3984,13 @@ final class TerminalSurface: Identifiable, ObservableObject {
             }
         }
         flushText(&bufferedText, surface: surface)
+    }
+
+    /// Send a Return key press. Used by session restore to execute restore
+    /// commands after typing them into the shell.
+    func sendReturnKeyPress() {
+        guard let surface = surface else { return }
+        sendKeyEvent(surface: surface, keycode: 0x24) // kVK_Return
     }
 
     private func flushText(_ buffer: inout String, surface: ghostty_surface_t) {

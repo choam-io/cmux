@@ -262,6 +262,7 @@ extension Workspace {
     func restoreSessionSnapshot(_ snapshot: SessionWorkspaceSnapshot) {
         restoredTerminalScrollbackByPanelId.removeAll(keepingCapacity: false)
         cachedRestoreCommandByPanelId.removeAll(keepingCapacity: false)
+        pendingRestoreCommandByPanelId.removeAll(keepingCapacity: false)
 
         let normalizedCurrentDirectory = snapshot.currentDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedCurrentDirectory.isEmpty {
@@ -630,13 +631,12 @@ extension Workspace {
             if let restoreCommand = restoreCommand {
                 cachedRestoreCommandByPanelId[terminalPanel.id] = restoreCommand
             }
-            // Send the restore command as text input after the shell is ready.
-            // This bypasses ghostty's command mechanism entirely and just types
-            // the command into the login shell, which works regardless of how
-            // nsmux was launched (terminal, Raycast, Finder, etc.).
+            // Park the restore command so it fires when the terminal surface
+            // becomes ready. For the selected workspace this happens within ms
+            // of mount; for non-selected workspaces it fires when the user
+            // first switches to them.
             if let restoreCommand = restoreCommand {
-                let panelId = terminalPanel.id
-                sendRestoreCommandWhenReady(restoreCommand, panelId: panelId)
+                parkRestoreCommand(restoreCommand, forPanelId: terminalPanel.id)
             }
             let fallbackScrollback = SessionPersistencePolicy.truncatedScrollback(snapshot.terminal?.scrollback)
             if let fallbackScrollback {
@@ -671,34 +671,34 @@ extension Workspace {
         }
     }
 
-    /// Send a restore command to a terminal panel after its surface is ready.
-    /// Waits for the ghostty surface to exist, then adds a delay for the shell
-    /// to finish loading rc files and display its first prompt.
-    private func sendRestoreCommandWhenReady(_ command: String, panelId: UUID, attempt: Int = 0) {
-        let maxAttempts = 30  // 30 * 100ms = 3s max wait for surface
-        guard attempt < maxAttempts else {
-            NSLog("[Workspace] sendRestoreCommand: gave up after %d attempts for panel %@", maxAttempts, panelId.uuidString)
-            return
-        }
-        
-        guard let panel = panels[panelId] as? TerminalPanel,
-              panel.surface.surface != nil else {
-            // Surface not ready yet, retry after a short delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.sendRestoreCommandWhenReady(command, panelId: panelId, attempt: attempt + 1)
-            }
-            return
-        }
-        
-        // Surface exists but the shell inside it needs time to initialize
-        // (load .zshrc, nvm, prompt theme, etc.). Wait for the shell to be
-        // ready before sending the command. 1.5s covers typical shell startup
-        // including heavy setups like powerlevel10k + nvm.
-        NSLog("[Workspace] sendRestoreCommand: surface ready for panel %@, waiting for shell init", panelId.uuidString)
+    /// Send a restore command to a terminal panel once its surface becomes ready.
+    /// The command is parked in pendingRestoreCommandByPanelId and drained by the
+    /// TabManager's `.terminalSurfaceDidBecomeReady` observer. For the selected
+    /// workspace the surface appears within milliseconds of mount; for non-selected
+    /// workspaces it fires when the user first switches to them.
+    private func parkRestoreCommand(_ command: String, forPanelId panelId: UUID) {
+        pendingRestoreCommandByPanelId[panelId] = command
+        NSLog("[Workspace] parkRestoreCommand: parked for panel %@", panelId.uuidString)
+    }
+
+    /// Called by TabManager when `.terminalSurfaceDidBecomeReady` fires.
+    /// If the panel has a pending restore command (parked during session restore),
+    /// send it now that the shell is initializing.
+    func drainPendingRestoreCommand(forSurfaceId surfaceId: UUID) {
+        // surfaceId == TerminalSurface.id == TerminalPanel.id == panels key.
+        let panelId = surfaceId
+        guard let command = pendingRestoreCommandByPanelId.removeValue(forKey: panelId) else { return }
+        guard panels[panelId] is TerminalPanel else { return }
+        NSLog("[Workspace] drainPendingRestoreCommand: surface ready for panel %@, waiting for shell init (pending remaining: %d)",
+              panelId.uuidString, pendingRestoreCommandByPanelId.count)
+        // Wait for the shell to finish loading rc files (zshrc, nvm, prompt
+        // theme, etc.) before typing the command. 1.5s covers typical heavy
+        // setups like powerlevel10k + nvm.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self, let panel = self.panels[panelId] as? TerminalPanel else { return }
-            NSLog("[Workspace] sendRestoreCommand: sending to panel %@: %@", panelId.uuidString, command)
-            panel.sendText(command + "\r")
+            NSLog("[Workspace] drainPendingRestoreCommand: sending to panel %@: %@", panelId.uuidString, command)
+            panel.sendText(command)
+            panel.sendReturnKeyPress()
         }
     }
 
@@ -5602,6 +5602,14 @@ final class Workspace: Identifiable, ObservableObject {
     /// (initialCommand), and carried forward across autosaves. This avoids re-looking up
     /// markers by surface ID, which breaks after nsmux restarts (new surface IDs).
     private var cachedRestoreCommandByPanelId: [UUID: String] = [:]
+    /// Restore commands waiting for a terminal surface to become ready. Populated
+    /// during session restore for panels whose surface hasn't been created yet
+    /// (non-selected workspaces are not mounted). Drained when
+    /// `.terminalSurfaceDidBecomeReady` fires for the corresponding panel.
+    private var pendingRestoreCommandByPanelId: [UUID: String] = [:]
+
+    /// True if any panels have restore commands waiting for their surface to become ready.
+    var hasPendingRestoreCommands: Bool { !pendingRestoreCommandByPanelId.isEmpty }
 
     private static func isProxyOnlyRemoteError(_ detail: String) -> Bool {
         let lowered = detail.lowercased()
