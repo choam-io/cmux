@@ -86,7 +86,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
         // Animate in
         panel.alphaValue = 0
-        panel.orderFront(nil)
+        panel.makeKeyAndOrderFront(nil)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
             panel.animator().alphaValue = 1
@@ -94,9 +94,9 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
         isShowing = true
 
-        // Focus the terminal
+        // Focus the terminal surface view so it receives keyboard input.
+        // This must happen AFTER makeKeyAndOrderFront.
         if let surface = terminalSurface {
-            panel.makeKey()
             panel.makeFirstResponder(surface.focusableView)
         }
 
@@ -137,23 +137,23 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     private func initializeTerminal() {
         guard !terminalInitialized, let parentWindow else { return }
 
-        // Create the child panel
+        // Create the child panel -- use TerminalPopupPanel subclass so
+        // canBecomeKey returns true (borderless NSPanel defaults to false).
+        // Do NOT use .nonactivatingPanel -- we need keyboard focus.
         let popupFrame = computePopupFrame(in: parentWindow)
-        let newPanel = NSPanel(
+        let newPanel = TerminalPopupPanel(
             contentRect: popupFrame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
+        newPanel.popupController = self
         newPanel.identifier = NSUserInterfaceItemIdentifier("cmux.terminal-popup")
         newPanel.isOpaque = false
         newPanel.hasShadow = true
         newPanel.backgroundColor = .clear
         newPanel.level = parentWindow.level
         newPanel.collectionBehavior = [.fullScreenAuxiliary]
-        // Must accept key to receive keyboard input for the terminal
-        newPanel.isFloatingPanel = false
-        newPanel.becomesKeyOnlyIfNeeded = false
         newPanel.hidesOnDeactivate = false
         newPanel.delegate = self
         self.panel = newPanel
@@ -337,5 +337,23 @@ private class PopupContainerView: NSView {
     override func updateLayer() {
         super.updateLayer()
         layer?.borderColor = NSColor.separatorColor.cgColor
+    }
+}
+
+// MARK: - TerminalPopupPanel
+
+/// NSPanel subclass that can become key window (borderless panels can't by default)
+/// and routes Escape to dismiss the popup.
+private class TerminalPopupPanel: NSPanel {
+    weak var popupController: TerminalPopupWindowController?
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        // cancelOperation is called by the responder chain for Escape
+        Task { @MainActor in
+            popupController?.handleEscape()
+        }
     }
 }
