@@ -43,6 +43,9 @@
 			A5001093 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001090 /* AppDelegate.swift */; };
 			PFXKEY03 /* PrefixKeyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFXKEY01 /* PrefixKeyMode.swift */; };
 			PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */; };
+			WEBAPP04 /* WebAppDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP01 /* WebAppDefinition.swift */; };
+			WEBAPP05 /* WebAppManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP02 /* WebAppManager.swift */; };
+			WEBAPP06 /* WebAppNotificationHook.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP03 /* WebAppNotificationHook.swift */; };
 			DKBND01 /* DirectKeyBindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DKBND00 /* DirectKeyBindings.swift */; };
 			FGPD01 /* ForegroundProcessDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FGPD00 /* ForegroundProcessDetector.swift */; };
 			PISESS02 /* PiSessionMarkerReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = PISESS01 /* PiSessionMarkerReader.swift */; };
@@ -229,6 +232,9 @@
 		A5001090 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		PFXKEY01 /* PrefixKeyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefixKeyMode.swift; sourceTree = "<group>"; };
 		PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+PrefixKeyMode.swift"; sourceTree = "<group>"; };
+		WEBAPP01 /* WebAppDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppDefinition.swift"; sourceTree = "<group>"; };
+		WEBAPP02 /* WebAppManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppManager.swift"; sourceTree = "<group>"; };
+		WEBAPP03 /* WebAppNotificationHook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppNotificationHook.swift"; sourceTree = "<group>"; };
 		DKBND00 /* DirectKeyBindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectKeyBindings.swift; sourceTree = "<group>"; };
 		FGPD00 /* ForegroundProcessDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundProcessDetector.swift; sourceTree = "<group>"; };
 		PISESS01 /* PiSessionMarkerReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiSessionMarkerReader.swift; sourceTree = "<group>"; };
@@ -456,6 +462,9 @@
 				PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */,
 				DKBND00 /* DirectKeyBindings.swift */,
 				FGPD00 /* ForegroundProcessDetector.swift */,
+				WEBAPP01 /* WebAppDefinition.swift */,
+				WEBAPP02 /* WebAppManager.swift */,
+				WEBAPP03 /* WebAppNotificationHook.swift */,
 				A5001091 /* NotificationsPage.swift */,
 				A5001092 /* TerminalNotificationStore.swift */,
 				A5001301 /* SurfaceSearchOverlay.swift */,
@@ -760,6 +769,9 @@
 				A5001093 /* AppDelegate.swift in Sources */,
 				PFXKEY03 /* PrefixKeyMode.swift in Sources */,
 				PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */,
+				WEBAPP04 /* WebAppDefinition.swift in Sources */,
+				WEBAPP05 /* WebAppManager.swift in Sources */,
+				WEBAPP06 /* WebAppNotificationHook.swift in Sources */,
 				DKBND01 /* DirectKeyBindings.swift in Sources */,
 				FGPD01 /* ForegroundProcessDetector.swift in Sources */,
 				PISESS02 /* PiSessionMarkerReader.swift in Sources */,

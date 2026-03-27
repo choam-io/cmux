@@ -3307,6 +3307,24 @@ final class BrowserPanel: Panel, ObservableObject {
         popupControllers.removeAll { $0 === controller }
     }
 
+    // MARK: - Web App Notification Hook
+
+    /// Install a script message handler and user script for web app notification interception.
+    func installWebAppNotificationHandler(handler: WKScriptMessageHandler, script: String) {
+        let controller = webView.configuration.userContentController
+        controller.add(handler, name: "cmuxWebAppNotification")
+        controller.addUserScript(
+            WKUserScript(
+                source: script,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        #if DEBUG
+        dlog("webapp.installHook.ok panel=\(id.uuidString.prefix(5))")
+        #endif
+    }
+
     private func refreshFavicon(from webView: WKWebView) {
         faviconTask?.cancel()
         faviconTask = nil

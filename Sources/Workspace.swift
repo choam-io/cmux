@@ -255,7 +255,8 @@ extension Workspace {
             statusEntries: statusSnapshots,
             logEntries: logSnapshots,
             progress: progressSnapshot,
-            gitBranch: gitBranchSnapshot
+            gitBranch: gitBranchSnapshot,
+            webAppId: WebAppManager.shared.appForWorkspace(id)?.id
         )
     }
 

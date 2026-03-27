@@ -109,6 +109,12 @@ extension AppDelegate {
         // Popup terminal
         case .togglePopup:
             TerminalController.shared.togglePopup(parentWindow: preferredWindow, command: "workmux dashboard")
+
+        // Web apps
+        case .toggleWebApp:
+            if let tabManager {
+                WebAppManager.shared.toggleFirstWebApp(tabManager: tabManager)
+            }
             
         default:
             #if DEBUG

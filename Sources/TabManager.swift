@@ -1327,6 +1327,18 @@ class TabManager: ObservableObject {
         return newWorkspace
     }
 
+    /// Create a workspace with a custom title, optionally suppressing focus.
+    /// Used by WebAppManager to create background webapp workspaces.
+    @discardableResult
+    func addWorkspace(title: String, suppressFocus: Bool) -> Workspace? {
+        let workspace = addWorkspace(
+            select: !suppressFocus,
+            autoWelcomeIfNeeded: false
+        )
+        workspace.customTitle = title
+        return workspace
+    }
+
     @MainActor
     private func sendWelcomeWhenReady(to workspace: Workspace) {
         if let terminalPanel = workspace.focusedTerminalPanel,
@@ -5568,6 +5580,12 @@ extension TabManager {
             NSLog("[TabManager] restoreSession: workspace %d hasPendingRestoreCommands=%d",
                   index, workspace.hasPendingRestoreCommands ? 1 : 0)
             wireClosedBrowserTracking(for: workspace)
+
+            // Reconnect web app workspace if this was a webapp shortcut
+            if let webAppId = workspaceSnapshot.webAppId {
+                WebAppManager.shared.reconnectWebAppWorkspace(appId: webAppId, workspaceId: workspace.id)
+            }
+
             newTabs.append(workspace)
         }
 

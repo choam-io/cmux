@@ -8691,8 +8691,10 @@ struct VerticalTabsSidebar: View {
     }
 
     var body: some View {
-        let workspaceCount = tabManager.tabs.count
-        let canCloseWorkspace = workspaceCount > 1
+        let allWorkspaceCount = tabManager.tabs.count
+        let visibleWorkspaceCount = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }.count
+        let workspaceCount = visibleWorkspaceCount
+        let canCloseWorkspace = allWorkspaceCount > 1
         let workspaceNumberShortcut = self.workspaceNumberShortcut
 
         VStack(spacing: 0) {
@@ -8704,7 +8706,8 @@ struct VerticalTabsSidebar: View {
                             .frame(height: trafficLightPadding)
 
                         LazyVStack(spacing: tabRowSpacing) {
-                            ForEach(Array(tabManager.tabs.enumerated()), id: \.element.id) { index, tab in
+                            let visibleTabs = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }
+                            ForEach(Array(visibleTabs.enumerated()), id: \.element.id) { index, tab in
                                 let selectedContextIds: Set<UUID> = selectedTabIds.contains(tab.id) ? selectedTabIds : [tab.id]
                                 let contextTargetIds = tabManager.tabs.compactMap { workspace in
                                     selectedContextIds.contains(workspace.id) ? workspace.id : nil
@@ -9752,8 +9755,85 @@ private struct SidebarFooterButtons: View {
         HStack(spacing: 4) {
             SidebarHelpMenuButton(onSendFeedback: onSendFeedback)
             UpdatePill(model: updateViewModel)
+            Spacer(minLength: 0)
+            SidebarWebAppButtons()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Sidebar footer icons for enabled web app shortcuts.
+private struct SidebarWebAppButtons: View {
+    @ObservedObject private var webAppManager = WebAppManager.shared
+    @EnvironmentObject var tabManager: TabManager
+
+    var body: some View {
+        ForEach(webAppManager.enabledApps) { app in
+            SidebarWebAppButton(app: app, tabManager: tabManager)
+        }
+    }
+}
+
+/// Individual web app icon button with unread badge.
+private struct SidebarWebAppButton: View {
+    let app: WebAppDefinition
+    let tabManager: TabManager
+    @ObservedObject private var webAppManager = WebAppManager.shared
+    @State private var isHovered = false
+
+    private var unreadCount: Int {
+        webAppManager.unreadCounts[app.id] ?? 0
+    }
+
+    private var isActive: Bool {
+        guard let workspaceId = webAppManager.appWorkspaceIds[app.id] else { return false }
+        return tabManager.selectedTabId == workspaceId
+    }
+
+    var body: some View {
+        Button(action: {
+            webAppManager.toggleWebApp(app.id, tabManager: tabManager)
+        }) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: app.iconSystemName)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isActive ? .white : .secondary)
+                    .frame(width: 24, height: 24)
+
+                // Unread badge
+                if unreadCount != 0 {
+                    ZStack {
+                        Circle()
+                            .fill(Color.red)
+                        if unreadCount > 0 {
+                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: unreadCount > 0 ? 14 : 8, height: unreadCount > 0 ? 14 : 8)
+                    .offset(x: 3, y: -3)
+                }
+            }
+        }
+        .buttonStyle(SidebarFooterIconButtonStyle())
+        .safeHelp(webAppTooltip)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    private var webAppTooltip: String {
+        let base = app.displayName
+        if unreadCount > 0 {
+            return "\(base) (\(unreadCount) unread)"
+        } else if unreadCount == -1 {
+            return String(
+                format: String(localized: "webapp.tooltip.unread", defaultValue: "%@ (unread)"),
+                base
+            )
+        }
+        return "\(base) (prefix+S)"
     }
 }
 

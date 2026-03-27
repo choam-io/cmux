@@ -342,6 +342,8 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var logEntries: [SessionLogEntrySnapshot]
     var progress: SessionProgressSnapshot?
     var gitBranch: SessionGitBranchSnapshot?
+    /// If set, this workspace hosts a web app shortcut (e.g. "slack").
+    var webAppId: String?
 }
 
 struct SessionTabManagerSnapshot: Codable, Sendable {
