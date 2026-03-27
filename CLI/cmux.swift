@@ -6873,13 +6873,11 @@ struct CMUXCLI {
               --command <text>        Initial command to run in the popup
               --width <percent>       Width as percentage of screen (default: 80)
               --height <percent>      Height as percentage of screen (default: 80)
-              --close-on-blur         Auto-hide when popup loses focus
 
             Examples:
               cmux popup
               cmux popup --cwd ~/projects/myapp
               cmux popup --command "workmux dashboard" --width 90 --height 70
-              cmux popup show --close-on-blur
               cmux popup close
             """
         case "bind-key", "unbind-key", "copy-mode":
@@ -10878,11 +10876,9 @@ struct CMUXCLI {
             let (commandOpt, rem1) = parseOption(rem0, name: "--command")
             let (widthOpt, rem2) = parseOption(rem1, name: "--width")
             let (heightOpt, rem3) = parseOption(rem2, name: "--height")
-            let closeOnBlur = rem3.contains("--close-on-blur")
-            let remaining = rem3.filter { $0 != "--close-on-blur" }
 
             // Determine subcommand: toggle (default), show, hide, close
-            let subcommand = remaining.first ?? "toggle"
+            let subcommand = rem3.first ?? "toggle"
             let method: String
             switch subcommand {
             case "show":
@@ -10910,9 +10906,6 @@ struct CMUXCLI {
             }
             if let heightOpt, let heightPct = Double(heightOpt) {
                 params["height_percent"] = heightPct / 100.0
-            }
-            if closeOnBlur {
-                params["close_on_focus_loss"] = true
             }
 
             let response = try client.sendV2(method: method, params: params)

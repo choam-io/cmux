@@ -6673,7 +6673,7 @@ class TerminalController {
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
         let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-        let closeOnBlur = v2Bool(params, "close_on_focus_loss") ?? false
+        
 
         v2MainSync {
             let controller = getOrCreatePopupController(
@@ -6681,7 +6681,7 @@ class TerminalController {
                 command: command,
                 widthPct: widthPct,
                 heightPct: heightPct,
-                closeOnBlur: closeOnBlur
+                
             )
             controller.toggle()
         }
@@ -6693,7 +6693,7 @@ class TerminalController {
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
         let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-        let closeOnBlur = v2Bool(params, "close_on_focus_loss") ?? false
+        
 
         v2MainSync {
             let controller = getOrCreatePopupController(
@@ -6701,7 +6701,7 @@ class TerminalController {
                 command: command,
                 widthPct: widthPct,
                 heightPct: heightPct,
-                closeOnBlur: closeOnBlur
+                
             )
             controller.show()
         }
@@ -6727,8 +6727,7 @@ class TerminalController {
         cwd: String?,
         command: String?,
         widthPct: Double?,
-        heightPct: Double?,
-        closeOnBlur: Bool
+        heightPct: Double?
     ) -> TerminalPopupWindowController {
         if let existing = popupController {
             return existing
@@ -6738,7 +6737,6 @@ class TerminalController {
         config.initialCommand = command
         if let widthPct { config.widthPercent = CGFloat(widthPct) }
         if let heightPct { config.heightPercent = CGFloat(heightPct) }
-        config.closeOnFocusLoss = closeOnBlur
 
         let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow
         let controller = TerminalPopupWindowController(

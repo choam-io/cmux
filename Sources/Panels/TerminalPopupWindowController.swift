@@ -1,14 +1,15 @@
 import AppKit
 import Combine
 
-/// Hosts a `TerminalSurface` in a floating `NSPanel`, providing tmux
-/// `display-popup`-style functionality: a transient, centered terminal
-/// overlay that can be summoned with a keybind, interacted with, and
-/// dismissed with Escape or the same keybind.
+/// In-window terminal popup overlay, rendered as an NSPanel child window
+/// so it appears above Ghostty's Metal terminal layers.
 ///
-/// The shell persists between show/hide cycles (Quake-style). The panel
-/// is lazily created on first toggle and reused until explicitly closed
-/// or the parent window is deallocated.
+/// Behavior:
+/// - Centered within the parent cmux window, not floating on desktop
+/// - Moves and resizes with the parent window
+/// - Escape dismisses
+/// - Shell persists between show/hide (Quake-style)
+/// - Toggle keybind shows/hides
 @MainActor
 final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
@@ -19,60 +20,45 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         var heightPercent: CGFloat = 0.8
         var minWidth: CGFloat = 400
         var minHeight: CGFloat = 300
-        var closeOnFocusLoss: Bool = false
         var workingDirectory: String? = nil
         var initialCommand: String? = nil
     }
 
     // MARK: - State
 
-    private let panel: TerminalPopupPanel
+    private var panel: NSPanel?
     private var terminalSurface: TerminalSurface?
     private var config: Config
     private weak var parentWindow: NSWindow?
     private var isShowing = false
-
-    /// Track whether the terminal has been initialized (shell spawned).
     private var terminalInitialized = false
+    private var parentFrameObservation: NSObjectProtocol?
+    private var parentMoveObservation: NSObjectProtocol?
+    private var escapeMonitor: Any?
+    private var containerView: PopupContainerView?
 
     // MARK: - Init
 
     init(parentWindow: NSWindow?, config: Config = Config()) {
         self.config = config
         self.parentWindow = parentWindow
-
-        let contentRect = Self.computeContentRect(
-            parentWindow: parentWindow,
-            config: config
-        )
-
-        let panel = TerminalPopupPanel(
-            contentRect: contentRect,
-            styleMask: [.borderless, .nonactivatingPanel, .resizable],
-            backing: .buffered,
-            defer: true
-        )
-        panel.identifier = NSUserInterfaceItemIdentifier("cmux.terminal-popup")
-        panel.level = .floating
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.hasShadow = true
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.isMovableByWindowBackground = true
-        panel.animationBehavior = .utilityWindow
-        panel.becomesKeyOnlyIfNeeded = false
-        self.panel = panel
-
         super.init()
+    }
 
-        panel.delegate = self
-        panel.popupController = self
+    deinit {
+        if let obs = parentFrameObservation {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        if let obs = parentMoveObservation {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        if let monitor = escapeMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     // MARK: - Public API
 
-    /// Toggle visibility. If hidden, show and focus. If visible, hide.
     func toggle() {
         if isShowing {
             hide()
@@ -81,58 +67,98 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Show the popup, creating the terminal if needed.
     func show() {
+        guard let parentWindow else { return }
+
         if !terminalInitialized {
             initializeTerminal()
         }
 
-        // Reposition to match current parent window geometry
-        let contentRect = Self.computeContentRect(
-            parentWindow: parentWindow,
-            config: config
-        )
-        panel.setFrame(contentRect, display: false)
-        panel.makeKeyAndOrderFront(nil)
+        guard let panel else { return }
+
+        // Position within parent window
+        let popupFrame = computePopupFrame(in: parentWindow)
+        panel.setFrame(popupFrame, display: false)
+
+        if panel.parent == nil {
+            parentWindow.addChildWindow(panel, ordered: .above)
+        }
+
+        // Animate in
+        panel.alphaValue = 0
+        panel.orderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            panel.animator().alphaValue = 1
+        }
+
         isShowing = true
 
-        // Focus the terminal surface view so it receives keyboard input
+        // Focus the terminal
         if let surface = terminalSurface {
+            panel.makeKey()
             panel.makeFirstResponder(surface.focusableView)
         }
+
+        // Track parent window moves/resizes
+        startTrackingParentFrame()
+
+        // Monitor Escape key to dismiss
+        startEscapeMonitor()
     }
 
-    /// Hide the popup without destroying the terminal.
     func hide() {
-        panel.orderOut(nil)
-        isShowing = false
+        guard let panel, isShowing else { return }
 
-        // Return focus to parent window
-        parentWindow?.makeKeyAndOrderFront(nil)
+        stopTrackingParentFrame()
+        stopEscapeMonitor()
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.12
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            panel.orderOut(nil)
+            // Return focus to parent
+            self?.parentWindow?.makeKeyAndOrderFront(nil)
+        })
+
+        isShowing = false
     }
 
-    /// Close and destroy the popup terminal.
     func close() {
         hide()
         teardownTerminal()
     }
 
-    /// Whether the popup is currently visible.
     var isVisible: Bool { isShowing }
-
-    /// The popup's virtual workspace ID (for surface identification).
-    var popupWorkspaceId: UUID? { terminalSurface?.tabId }
-
-    /// Send text to the popup terminal.
-    func sendText(_ text: String) {
-        terminalSurface?.sendText(text)
-    }
 
     // MARK: - Terminal Lifecycle
 
     private func initializeTerminal() {
-        guard !terminalInitialized else { return }
+        guard !terminalInitialized, let parentWindow else { return }
 
+        // Create the child panel
+        let popupFrame = computePopupFrame(in: parentWindow)
+        let newPanel = NSPanel(
+            contentRect: popupFrame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        newPanel.identifier = NSUserInterfaceItemIdentifier("cmux.terminal-popup")
+        newPanel.isOpaque = false
+        newPanel.hasShadow = true
+        newPanel.backgroundColor = .clear
+        newPanel.level = parentWindow.level
+        newPanel.collectionBehavior = [.fullScreenAuxiliary]
+        // Must accept key to receive keyboard input for the terminal
+        newPanel.isFloatingPanel = false
+        newPanel.becomesKeyOnlyIfNeeded = false
+        newPanel.hidesOnDeactivate = false
+        newPanel.delegate = self
+        self.panel = newPanel
+
+        // Create terminal surface
         let popupWorkspaceId = UUID()
         let surface = TerminalSurface(
             tabId: popupWorkspaceId,
@@ -143,71 +169,154 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             initialEnvironmentOverrides: [:],
             additionalEnvironment: ["CMUX_POPUP": "1"]
         )
+        self.terminalSurface = surface
 
-        // The TerminalSurface creates its own GhosttyNSView (surfaceView)
-        // and wraps it in a GhosttySurfaceScrollView (hostedView).
-        // We put the hostedView into the panel.
-        let hostedView = surface.hostedView
-
-        // Create a container with rounded corners
+        // Build the visual container: rounded rect with border + shadow
         let container = PopupContainerView()
         container.wantsLayer = true
-        container.layer?.cornerRadius = 8
+        container.layer?.cornerRadius = 10
         container.layer?.masksToBounds = true
+        container.layer?.borderWidth = 1.5
         container.layer?.borderColor = NSColor.separatorColor.cgColor
-        container.layer?.borderWidth = 1.0
+        self.containerView = container
 
+        // Add the terminal's hosted view into the container
+        let hostedView = surface.hostedView
         hostedView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(hostedView)
+
+        // Add the container to the panel
+        container.translatesAutoresizingMaskIntoConstraints = false
+        let panelContentView = newPanel.contentView!
+        panelContentView.wantsLayer = true
+        panelContentView.addSubview(container)
+
         NSLayoutConstraint.activate([
+            // Container has margin for the shadow to render
+            container.topAnchor.constraint(equalTo: panelContentView.topAnchor, constant: 8),
+            container.leadingAnchor.constraint(equalTo: panelContentView.leadingAnchor, constant: 8),
+            container.trailingAnchor.constraint(equalTo: panelContentView.trailingAnchor, constant: -8),
+            container.bottomAnchor.constraint(equalTo: panelContentView.bottomAnchor, constant: -8),
+
+            // Terminal fills the container
             hostedView.topAnchor.constraint(equalTo: container.topAnchor),
             hostedView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             hostedView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             hostedView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
-        panel.contentView = container
-        self.terminalSurface = surface
+        // Add a subtle shadow layer behind the container
+        let shadowLayer = CALayer()
+        shadowLayer.shadowColor = NSColor.black.cgColor
+        shadowLayer.shadowOpacity = 0.4
+        shadowLayer.shadowOffset = CGSize(width: 0, height: -2)
+        shadowLayer.shadowRadius = 12
+        panelContentView.layer?.insertSublayer(shadowLayer, at: 0)
+
         self.terminalInitialized = true
     }
 
     private func teardownTerminal() {
-        if let surface = terminalSurface {
-            surface.hostedView.removeFromSuperview()
+        stopTrackingParentFrame()
+        if let panel {
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
         }
+        containerView?.removeFromSuperview()
+        containerView = nil
         terminalSurface = nil
+        panel = nil
         terminalInitialized = false
-        panel.contentView = nil
+        isShowing = false
     }
 
     // MARK: - Geometry
 
-    private static func computeContentRect(
-        parentWindow: NSWindow?,
-        config: Config
-    ) -> NSRect {
-        let screen = parentWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
-        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+    private func computePopupFrame(in parentWindow: NSWindow) -> NSRect {
+        let parentFrame = parentWindow.frame
+        let parentContent = parentWindow.contentRect(forFrameRect: parentFrame)
 
-        let width = max(config.minWidth, visibleFrame.width * config.widthPercent)
-        let height = max(config.minHeight, visibleFrame.height * config.heightPercent)
+        let width = max(config.minWidth, parentContent.width * config.widthPercent)
+        let height = max(config.minHeight, parentContent.height * config.heightPercent)
 
-        let x = visibleFrame.midX - width / 2
-        let y = visibleFrame.midY - height / 2
+        // Center within the parent window's content area
+        let x = parentContent.midX - width / 2
+        let y = parentContent.midY - height / 2
 
         return NSRect(x: x, y: y, width: width, height: height)
+    }
+
+    // MARK: - Parent Frame Tracking
+
+    private func startTrackingParentFrame() {
+        stopTrackingParentFrame()
+        guard let parentWindow else { return }
+
+        parentFrameObservation = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: parentWindow,
+            queue: .main
+        ) { [weak self] _ in
+            self?.repositionToParent()
+        }
+
+        parentMoveObservation = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: parentWindow,
+            queue: .main
+        ) { [weak self] _ in
+            self?.repositionToParent()
+        }
+    }
+
+    private func stopTrackingParentFrame() {
+        if let obs = parentFrameObservation {
+            NotificationCenter.default.removeObserver(obs)
+            parentFrameObservation = nil
+        }
+        if let obs = parentMoveObservation {
+            NotificationCenter.default.removeObserver(obs)
+            parentMoveObservation = nil
+        }
+    }
+
+    private func repositionToParent() {
+        guard let parentWindow, let panel, isShowing else { return }
+        let popupFrame = computePopupFrame(in: parentWindow)
+        panel.setFrame(popupFrame, display: true)
+    }
+
+    // MARK: - Escape Monitor
+
+    private func startEscapeMonitor() {
+        stopEscapeMonitor()
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.isShowing else { return event }
+            // Only intercept bare Escape (no modifiers)
+            if event.keyCode == 53,
+               event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+                // Only if the popup panel is key
+                if event.window === self.panel {
+                    self.hide()
+                    return nil // consume the event
+                }
+            }
+            return event
+        }
+    }
+
+    private func stopEscapeMonitor() {
+        if let monitor = escapeMonitor {
+            NSEvent.removeMonitor(monitor)
+            escapeMonitor = nil
+        }
     }
 
     // MARK: - NSWindowDelegate
 
     func windowDidResignKey(_ notification: Notification) {
-        if config.closeOnFocusLoss && isShowing {
-            hide()
-        }
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        isShowing = false
+        // Don't auto-hide on focus loss -- the user might be clicking on
+        // the parent window or another app. Only Escape dismisses.
     }
 
     // MARK: - Escape handling
@@ -219,37 +328,9 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     }
 }
 
-// MARK: - TerminalPopupPanel
-
-/// NSPanel subclass that intercepts Escape to dismiss the popup and
-/// allows the terminal surface to be the first responder for keyboard input.
-private class TerminalPopupPanel: NSPanel {
-    weak var popupController: TerminalPopupWindowController?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func cancelOperation(_ sender: Any?) {
-        Task { @MainActor in
-            popupController?.handleEscape()
-        }
-    }
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // Escape: dismiss popup
-        if event.keyCode == 53 {
-            Task { @MainActor in
-                popupController?.handleEscape()
-            }
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
-    }
-}
-
 // MARK: - PopupContainerView
 
-/// Container view with rounded corners for the popup terminal.
+/// Container view with rounded corners. updateLayer keeps border in sync with appearance.
 private class PopupContainerView: NSView {
     override var isFlipped: Bool { true }
 
