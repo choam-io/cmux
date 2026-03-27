@@ -110,6 +110,9 @@ final class PrefixKeyMode {
         // Sidebar
         "b": .toggleSidebar,   // prefix+b = toggle sidebar
         
+        // Popup terminal
+        "i": .togglePopup,     // prefix+i = toggle popup terminal
+        
         // Misc
         "t": .newSurface,      // prefix+t = new tab/surface
         "?": .triggerFlash,    // prefix+? = flash to find cursor

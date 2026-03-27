@@ -6668,6 +6668,18 @@ class TerminalController {
 
     // MARK: - Popup Terminal
 
+    /// Called from prefix key mode or other direct invocations (not via socket).
+    func togglePopup(parentWindow: NSWindow?) {
+        let controller = getOrCreatePopupController(
+            cwd: nil,
+            command: nil,
+            widthPct: nil,
+            heightPct: nil,
+            parentWindow: parentWindow
+        )
+        controller.toggle()
+    }
+
     private func v2PopupToggle(params: [String: Any]) -> V2CallResult {
         let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -6727,7 +6739,8 @@ class TerminalController {
         cwd: String?,
         command: String?,
         widthPct: Double?,
-        heightPct: Double?
+        heightPct: Double?,
+        parentWindow: NSWindow? = nil
     ) -> TerminalPopupWindowController {
         if let existing = popupController {
             return existing
@@ -6738,9 +6751,9 @@ class TerminalController {
         if let widthPct { config.widthPercent = CGFloat(widthPct) }
         if let heightPct { config.heightPercent = CGFloat(heightPct) }
 
-        let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow
+        let resolvedParent = parentWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
         let controller = TerminalPopupWindowController(
-            parentWindow: parentWindow,
+            parentWindow: resolvedParent,
             config: config
         )
         popupController = controller

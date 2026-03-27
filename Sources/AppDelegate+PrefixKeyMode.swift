@@ -104,6 +104,10 @@ extension AppDelegate {
         case .triggerFlash:
             tabManager?.triggerFocusFlash()
             
+        // Popup terminal
+        case .togglePopup:
+            TerminalController.shared.togglePopup(parentWindow: preferredWindow)
+            
         default:
             #if DEBUG
             dlog("prefix.action.unhandled: \(action.rawValue)")
