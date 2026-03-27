@@ -6856,9 +6856,31 @@ struct CMUXCLI {
             """
         case "popup":
             return """
-            Usage: cmux popup
+            Usage: cmux popup [toggle|show|hide|close] [options]
 
-            tmux compatibility placeholder. This command is currently not supported.
+            Open a floating terminal popup centered on screen. The terminal
+            persists between show/hide cycles (Quake-style). Press Escape
+            or toggle again to dismiss.
+
+            Subcommands:
+              toggle (default)  Show if hidden, hide if visible
+              show              Show the popup
+              hide              Hide without destroying
+              close             Hide and destroy the terminal
+
+            Flags:
+              --cwd <path>            Working directory for the popup shell
+              --command <text>        Initial command to run in the popup
+              --width <percent>       Width as percentage of screen (default: 80)
+              --height <percent>      Height as percentage of screen (default: 80)
+              --close-on-blur         Auto-hide when popup loses focus
+
+            Examples:
+              cmux popup
+              cmux popup --cwd ~/projects/myapp
+              cmux popup --command "workmux dashboard" --width 90 --height 70
+              cmux popup show --close-on-blur
+              cmux popup close
             """
         case "bind-key", "unbind-key", "copy-mode":
             return """
@@ -10852,7 +10874,53 @@ struct CMUXCLI {
             print("OK")
 
         case "popup":
-            throw CLIError(message: "popup is not supported yet in cmux CLI parity mode")
+            let (cwdOpt, rem0) = parseOption(commandArgs, name: "--cwd")
+            let (commandOpt, rem1) = parseOption(rem0, name: "--command")
+            let (widthOpt, rem2) = parseOption(rem1, name: "--width")
+            let (heightOpt, rem3) = parseOption(rem2, name: "--height")
+            let closeOnBlur = rem3.contains("--close-on-blur")
+            let remaining = rem3.filter { $0 != "--close-on-blur" }
+
+            // Determine subcommand: toggle (default), show, hide, close
+            let subcommand = remaining.first ?? "toggle"
+            let method: String
+            switch subcommand {
+            case "show":
+                method = "popup.show"
+            case "hide":
+                method = "popup.hide"
+            case "close":
+                method = "popup.close"
+            case "toggle":
+                method = "popup.toggle"
+            default:
+                // If it's not a subcommand, treat it as toggle
+                method = "popup.toggle"
+            }
+
+            var params: [String: Any] = [:]
+            if let cwdOpt {
+                params["cwd"] = resolvePath(cwdOpt)
+            }
+            if let commandOpt {
+                params["command"] = commandOpt
+            }
+            if let widthOpt, let widthPct = Double(widthOpt) {
+                params["width_percent"] = widthPct / 100.0
+            }
+            if let heightOpt, let heightPct = Double(heightOpt) {
+                params["height_percent"] = heightPct / 100.0
+            }
+            if closeOnBlur {
+                params["close_on_focus_loss"] = true
+            }
+
+            let response = try client.sendV2(method: method, params: params)
+            if let visible = response["visible"] as? Bool {
+                print(visible ? "visible" : "hidden")
+            } else {
+                print("OK")
+            }
 
         case "bind-key", "unbind-key", "copy-mode":
             throw CLIError(message: "\(command) is not supported yet in cmux CLI parity mode")
@@ -12761,7 +12829,7 @@ struct CMUXCLI {
           find-window [--content] [--select] <query>
           clear-history [--workspace <id|ref>] [--surface <id|ref>]
           set-hook [--list] [--unset <event>] | <event> <command>
-          popup
+          popup [toggle|show|hide|close] [--cwd <path>] [--command <text>] [--width <pct>] [--height <pct>] [--close-on-blur]
           bind-key | unbind-key | copy-mode
           set-buffer [--name <name>] <text>
           list-buffers

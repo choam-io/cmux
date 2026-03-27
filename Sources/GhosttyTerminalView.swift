@@ -2889,6 +2889,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private var additionalEnvironment: [String: String]
     let hostedView: GhosttySurfaceScrollView
     private let surfaceView: GhosttyNSView
+
+    /// Package-internal access to the underlying NSView for focus management
+    /// (e.g., making the terminal first responder in popup panels).
+    var focusableView: GhosttyNSView { surfaceView }
     private var lastPixelWidth: UInt32 = 0
     private var lastPixelHeight: UInt32 = 0
     private var lastXScale: CGFloat = 0

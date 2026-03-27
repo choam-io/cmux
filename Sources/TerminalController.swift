@@ -50,6 +50,8 @@ class TerminalController {
     private nonisolated let listenerStateLock = NSLock()
     private var clientHandlers: [Int32: Thread] = [:]
     private var tabManager: TabManager?
+    /// Popup terminal controller (lazily created on first toggle).
+    private var popupController: TerminalPopupWindowController?
     private var accessMode: SocketControlMode = .cmuxOnly
     private let myPid = getpid()
     private nonisolated(unsafe) static var socketCommandPolicyDepth: Int = 0
@@ -2168,6 +2170,16 @@ class TerminalController {
         case "notification.clear":
             return v2Result(id: id, self.v2NotificationClear())
 
+        // Popup terminal
+        case "popup.toggle":
+            return v2Result(id: id, self.v2PopupToggle(params: params))
+        case "popup.show":
+            return v2Result(id: id, self.v2PopupShow(params: params))
+        case "popup.hide":
+            return v2Result(id: id, self.v2PopupHide())
+        case "popup.close":
+            return v2Result(id: id, self.v2PopupClose())
+
         // App focus
         case "app.focus_override.set":
             return v2Result(id: id, self.v2AppFocusOverride(params: params))
@@ -2491,6 +2503,10 @@ class TerminalController {
             "notification.create_for_target",
             "notification.list",
             "notification.clear",
+            "popup.toggle",
+            "popup.show",
+            "popup.hide",
+            "popup.close",
             "app.focus_override.set",
             "app.simulate_active",
             "markdown.open",
@@ -6648,6 +6664,89 @@ class TerminalController {
             TerminalNotificationStore.shared.clearAll()
         }
         return .ok([:])
+    }
+
+    // MARK: - Popup Terminal
+
+    private func v2PopupToggle(params: [String: Any]) -> V2CallResult {
+        let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
+        let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
+        let closeOnBlur = v2Bool(params, "close_on_focus_loss") ?? false
+
+        v2MainSync {
+            let controller = getOrCreatePopupController(
+                cwd: cwd,
+                command: command,
+                widthPct: widthPct,
+                heightPct: heightPct,
+                closeOnBlur: closeOnBlur
+            )
+            controller.toggle()
+        }
+        return .ok(["visible": popupController?.isVisible ?? false])
+    }
+
+    private func v2PopupShow(params: [String: Any]) -> V2CallResult {
+        let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
+        let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
+        let closeOnBlur = v2Bool(params, "close_on_focus_loss") ?? false
+
+        v2MainSync {
+            let controller = getOrCreatePopupController(
+                cwd: cwd,
+                command: command,
+                widthPct: widthPct,
+                heightPct: heightPct,
+                closeOnBlur: closeOnBlur
+            )
+            controller.show()
+        }
+        return .ok(["visible": true])
+    }
+
+    private func v2PopupHide() -> V2CallResult {
+        v2MainSync {
+            popupController?.hide()
+        }
+        return .ok(["visible": false])
+    }
+
+    private func v2PopupClose() -> V2CallResult {
+        v2MainSync {
+            popupController?.close()
+            popupController = nil
+        }
+        return .ok([:])
+    }
+
+    private func getOrCreatePopupController(
+        cwd: String?,
+        command: String?,
+        widthPct: Double?,
+        heightPct: Double?,
+        closeOnBlur: Bool
+    ) -> TerminalPopupWindowController {
+        if let existing = popupController {
+            return existing
+        }
+        var config = TerminalPopupWindowController.Config()
+        config.workingDirectory = cwd
+        config.initialCommand = command
+        if let widthPct { config.widthPercent = CGFloat(widthPct) }
+        if let heightPct { config.heightPercent = CGFloat(heightPct) }
+        config.closeOnFocusLoss = closeOnBlur
+
+        let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow
+        let controller = TerminalPopupWindowController(
+            parentWindow: parentWindow,
+            config: config
+        )
+        popupController = controller
+        return controller
     }
 
     private func v2FeedbackOpen(params: [String: Any]) -> V2CallResult {
