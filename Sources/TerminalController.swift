@@ -6669,10 +6669,10 @@ class TerminalController {
     // MARK: - Popup Terminal
 
     /// Called from prefix key mode or other direct invocations (not via socket).
-    func togglePopup(parentWindow: NSWindow?) {
+    func togglePopup(parentWindow: NSWindow?, command: String? = nil) {
         let controller = getOrCreatePopupController(
             cwd: nil,
-            command: nil,
+            command: command,
             widthPct: nil,
             heightPct: nil,
             parentWindow: parentWindow

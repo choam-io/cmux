@@ -108,7 +108,7 @@ extension AppDelegate {
             
         // Popup terminal
         case .togglePopup:
-            TerminalController.shared.togglePopup(parentWindow: preferredWindow)
+            TerminalController.shared.togglePopup(parentWindow: preferredWindow, command: "workmux dashboard")
             
         default:
             #if DEBUG
