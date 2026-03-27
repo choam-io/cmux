@@ -90,7 +90,7 @@ final class PrefixKeyMode {
         "↓": .focusDown,
         
         // Pane management
-        "x": .closeWorkspace,  // prefix+x = close pane (tmux: kill-pane)
+        "x": .closeSurface,    // prefix+x = close pane/surface (tmux: kill-pane)
         "z": .toggleSplitZoom, // prefix+z = zoom pane
         
         // Copy mode

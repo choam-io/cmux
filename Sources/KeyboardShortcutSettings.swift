@@ -28,6 +28,7 @@ enum KeyboardShortcutSettings {
         case renameTab
         case renameWorkspace
         case closeWorkspace
+        case closeSurface
         case newSurface
         case toggleTerminalCopyMode
 
@@ -70,6 +71,7 @@ enum KeyboardShortcutSettings {
             case .renameTab: return String(localized: "shortcut.renameTab.label", defaultValue: "Rename Tab")
             case .renameWorkspace: return String(localized: "shortcut.renameWorkspace.label", defaultValue: "Rename Workspace")
             case .closeWorkspace: return String(localized: "shortcut.closeWorkspace.label", defaultValue: "Close Workspace")
+            case .closeSurface: return String(localized: "shortcut.closeSurface.label", defaultValue: "Close Surface")
             case .newSurface: return String(localized: "shortcut.newSurface.label", defaultValue: "New Surface")
             case .toggleTerminalCopyMode: return String(localized: "shortcut.toggleTerminalCopyMode.label", defaultValue: "Toggle Terminal Copy Mode")
             case .focusLeft: return String(localized: "shortcut.focusPaneLeft.label", defaultValue: "Focus Pane Left")
@@ -105,6 +107,7 @@ enum KeyboardShortcutSettings {
             case .renameTab: return "shortcut.renameTab"
             case .renameWorkspace: return "shortcut.renameWorkspace"
             case .closeWorkspace: return "shortcut.closeWorkspace"
+            case .closeSurface: return "shortcut.closeSurface"
             case .focusLeft: return "shortcut.focusLeft"
             case .focusRight: return "shortcut.focusRight"
             case .focusUp: return "shortcut.focusUp"
@@ -156,6 +159,8 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "r", command: true, shift: true, option: false, control: false)
             case .closeWorkspace:
                 return StoredShortcut(key: "w", command: true, shift: true, option: false, control: false)
+            case .closeSurface:
+                return StoredShortcut(key: "w", command: true, shift: false, option: true, control: false)
             case .focusLeft:
                 return StoredShortcut(key: "←", command: true, shift: false, option: true, control: false)
             case .focusRight:

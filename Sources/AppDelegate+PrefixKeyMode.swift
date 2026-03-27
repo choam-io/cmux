@@ -70,6 +70,8 @@ extension AppDelegate {
             tabManager?.addWorkspace()
         case .closeWorkspace:
             tabManager?.closeCurrentWorkspaceWithConfirmation()
+        case .closeSurface:
+            tabManager?.closeCurrentPanelWithConfirmation()
         case .nextSidebarTab:
             tabManager?.selectNextTab()
         case .prevSidebarTab:
