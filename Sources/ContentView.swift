@@ -11460,7 +11460,7 @@ private struct TabItemView: View, Equatable {
                 }
 
                 Text(tab.title)
-                    .font(.system(size: 12.5, weight: titleFontWeight))
+                    .font(Font(SidebarFontHelper.sidebarTitleFont(size: 12.5, weight: .semibold)))
                     .foregroundColor(activePrimaryTextColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
