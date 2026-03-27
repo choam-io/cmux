@@ -70,12 +70,6 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     func show() {
         guard let parentWindow else { return }
 
-        // When running a specific command (like workmux dashboard), always
-        // start fresh so the command launches again each time.
-        if terminalInitialized && config.initialCommand != nil {
-            teardownTerminal()
-        }
-
         if !terminalInitialized {
             initializeTerminal()
         }
