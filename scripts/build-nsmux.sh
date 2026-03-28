@@ -11,6 +11,7 @@ DERIVED_DATA="${BUILD_DIR}/DerivedData"
 APP_NAME="nsmux"
 BUNDLE_ID="io.choam.nsmux"
 VERSION="${NSMUX_VERSION:-0.1.0}"
+BUILD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 
 cd "$PROJECT_DIR"
 
@@ -55,6 +56,10 @@ PLIST="${DEST_APP}/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName ${APP_NAME}" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${BUNDLE_ID}" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "$PLIST"
+
+# Stamp the git commit so doctor can check if the build is current
+/usr/libexec/PlistBuddy -c "Set :NsmuxBuildCommit ${BUILD_SHA}" "$PLIST" 2>/dev/null || \
+  /usr/libexec/PlistBuddy -c "Add :NsmuxBuildCommit string ${BUILD_SHA}" "$PLIST"
 
 # Add display name if not present
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${APP_NAME}" "$PLIST" 2>/dev/null || \
