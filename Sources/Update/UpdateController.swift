@@ -99,6 +99,15 @@ class UpdateController {
     /// Start the updater. If startup fails, the error is shown via the custom UI.
     func startUpdaterIfNeeded() {
         guard !didStartUpdater else { return }
+
+        // Disable Sparkle updates for rebranded forks (nsmux). The upstream
+        // appcast URL doesn't match our bundle and the "Update Available"
+        // badge is noise. Fork owners build from source.
+        if Bundle.main.bundleIdentifier != "com.cmuxterm.app" {
+            NSLog("[UpdateController] Skipping Sparkle: rebranded bundle (%@)", Bundle.main.bundleIdentifier ?? "nil")
+            return
+        }
+
         ensureSparkleInstallationCache()
 #if DEBUG
         // Keep the permission-related defaults resettable for UI tests even though the

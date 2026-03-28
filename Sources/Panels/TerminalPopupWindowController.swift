@@ -65,6 +65,12 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     func show() {
         guard let parentWindow else { return }
 
+        // If the terminal's shell has exited (e.g. workmux dashboard quit),
+        // tear down and reinitialise so the user gets a fresh command.
+        if terminalInitialized, let surface = terminalSurface, !surface.hasLiveSurface {
+            teardownTerminal()
+        }
+
         if !terminalInitialized {
             initializeTerminal()
         }
