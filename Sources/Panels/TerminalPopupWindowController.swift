@@ -7,9 +7,8 @@ import Combine
 /// Behavior:
 /// - Centered within the parent cmux window, not floating on desktop
 /// - Moves and resizes with the parent window
-/// - Escape dismisses
 /// - Shell persists between show/hide (Quake-style)
-/// - Toggle keybind shows/hides
+/// - Toggle keybind (prefix+i) shows/hides -- ESC passes through to terminal
 @MainActor
 final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
@@ -34,7 +33,6 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     private var terminalInitialized = false
     private var parentFrameObservation: NSObjectProtocol?
     private var parentMoveObservation: NSObjectProtocol?
-    private var escapeMonitor: Any?
     private var containerView: PopupContainerView?
 
     // MARK: - Init
@@ -51,9 +49,6 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         }
         if let obs = parentMoveObservation {
             NotificationCenter.default.removeObserver(obs)
-        }
-        if let monitor = escapeMonitor {
-            NSEvent.removeMonitor(monitor)
         }
     }
 
@@ -103,16 +98,15 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         // Track parent window moves/resizes
         startTrackingParentFrame()
 
-        // Monitor Escape key to dismiss
-        startEscapeMonitor()
+        // NOTE: No escape monitor. Popup is dismissed only via the
+        // prefix-key toggle (prefix+i). Escape is passed through to
+        // the terminal so TUI apps (workmux dashboard, etc.) can use it.
     }
 
     func hide() {
         guard let panel, isShowing else { return }
 
         stopTrackingParentFrame()
-        stopEscapeMonitor()
-
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
             panel.animator().alphaValue = 0
@@ -147,7 +141,6 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        newPanel.popupController = self
         newPanel.identifier = NSUserInterfaceItemIdentifier("cmux.terminal-popup")
         newPanel.isOpaque = false
         newPanel.hasShadow = true
@@ -286,46 +279,13 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         panel.setFrame(popupFrame, display: true)
     }
 
-    // MARK: - Escape Monitor
-
-    private func startEscapeMonitor() {
-        stopEscapeMonitor()
-        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.isShowing else { return event }
-            // Only intercept bare Escape (no modifiers)
-            if event.keyCode == 53,
-               event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
-                // Only if the popup panel is key
-                if event.window === self.panel {
-                    self.hide()
-                    return nil // consume the event
-                }
-            }
-            return event
-        }
-    }
-
-    private func stopEscapeMonitor() {
-        if let monitor = escapeMonitor {
-            NSEvent.removeMonitor(monitor)
-            escapeMonitor = nil
-        }
-    }
-
     // MARK: - NSWindowDelegate
 
     func windowDidResignKey(_ notification: Notification) {
         // Don't auto-hide on focus loss -- the user might be clicking on
-        // the parent window or another app. Only Escape dismisses.
+        // the parent window or another app. Only the prefix-key toggle dismisses.
     }
 
-    // MARK: - Escape handling
-
-    func handleEscape() {
-        if isShowing {
-            hide()
-        }
-    }
 }
 
 // MARK: - PopupContainerView
@@ -342,18 +302,10 @@ private class PopupContainerView: NSView {
 
 // MARK: - TerminalPopupPanel
 
-/// NSPanel subclass that can become key window (borderless panels can't by default)
-/// and routes Escape to dismiss the popup.
+/// NSPanel subclass that can become key window (borderless panels can't by default).
+/// Escape is NOT intercepted -- it passes through to the terminal.
+/// The popup is dismissed only via the prefix-key toggle.
 private class TerminalPopupPanel: NSPanel {
-    weak var popupController: TerminalPopupWindowController?
-
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
-
-    override func cancelOperation(_ sender: Any?) {
-        // cancelOperation is called by the responder chain for Escape
-        Task { @MainActor in
-            popupController?.handleEscape()
-        }
-    }
 }
