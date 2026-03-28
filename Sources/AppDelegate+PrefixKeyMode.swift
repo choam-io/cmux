@@ -108,7 +108,7 @@ extension AppDelegate {
             
         // Popup terminal
         case .togglePopup:
-            TerminalController.shared.togglePopup(parentWindow: preferredWindow, command: "$HOME/.cargo/bin/workmux dashboard")
+            TerminalController.shared.togglePopup(parentWindow: preferredWindow, command: "/bin/zsh -lic '$HOME/.cargo/bin/workmux dashboard'")
 
         // Web apps
         case .toggleWebApp:
