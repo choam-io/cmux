@@ -92,25 +92,6 @@ final class DirectKeyBindings {
     private func handlePaneNavigation(direction: NavigationDirection) -> Bool {
         guard let tabManager = AppDelegate.shared?.tabManager else { return false }
 
-        // If only one pane, don't consume the key
-        if let workspace = tabManager.selectedWorkspace {
-            let paneCount = workspace.bonsplitController.allPaneIds.count
-            if paneCount <= 1 {
-                return false
-            }
-        }
-
-        // If vim-aware mode is on, check the foreground process
-        if isVimAware {
-            if isFocusedSurfaceRunningVim(tabManager: tabManager) {
-                // Pass through to terminal -- nvim plugin handles edge navigation
-                return false
-            }
-        }
-
-        tabManager.movePaneFocus(direction: direction)
-
-        #if DEBUG
         let dirName: String
         switch direction {
         case .left: dirName = "left"
@@ -118,6 +99,31 @@ final class DirectKeyBindings {
         case .up: dirName = "up"
         case .down: dirName = "down"
         }
+
+        // If only one pane, don't consume the key
+        if let workspace = tabManager.selectedWorkspace {
+            let paneCount = workspace.bonsplitController.allPaneIds.count
+            if paneCount <= 1 {
+                Self.debugLog("navigate \(dirName): single pane, passing through")
+                return false
+            }
+        }
+
+        // If vim-aware mode is on, check the foreground process
+        if isVimAware {
+            let vimDetected = isFocusedSurfaceRunningVim(tabManager: tabManager)
+            Self.debugLog("navigate \(dirName): vimAware=true vimDetected=\(vimDetected)")
+            if vimDetected {
+                // Pass through to terminal -- nvim plugin handles edge navigation
+                return false
+            }
+        } else {
+            Self.debugLog("navigate \(dirName): vimAware=false, consuming key")
+        }
+
+        tabManager.movePaneFocus(direction: direction)
+
+        #if DEBUG
         dlog("directKeys.navigate: \(dirName)")
         #endif
 

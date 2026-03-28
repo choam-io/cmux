@@ -36,12 +36,27 @@ enum ForegroundProcessDetector {
         return path
     }
 
-    /// Check if the foreground process is vim/nvim.
+    /// Check if any process in the tree from shell to leaf is vim/nvim.
+    /// Walks the process tree checking each node rather than only the leaf,
+    /// because nvim spawns child processes (LSP servers, treesitter, etc.)
+    /// that would otherwise mask the vim detection.
     static func isVim(shellPid: pid_t) -> Bool {
-        let leafPid = findLeafProcess(parentPid: shellPid)
-        guard let path = processPath(for: leafPid) else { return false }
-        let baseName = (path as NSString).lastPathComponent.lowercased()
-        return vimProcessNames.contains(baseName)
+        var current = shellPid
+        for _ in 0..<20 {
+            if let path = processPath(for: current) {
+                let baseName = (path as NSString).lastPathComponent.lowercased()
+                if vimProcessNames.contains(baseName) {
+                    return true
+                }
+            }
+            var childPids = [pid_t](repeating: 0, count: 64)
+            let count = proc_listchildpids(current, &childPids, Int32(childPids.count * MemoryLayout<pid_t>.size))
+            if count <= 0 { return false }
+            let childCount = min(Int(count), childPids.count)
+            if childCount == 0 { return false }
+            current = childPids[0]
+        }
+        return false
     }
 
     // MARK: - Surface ID -> Shell PID mapping
