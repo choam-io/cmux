@@ -48,3 +48,4 @@ tests/visual_report.html
 tmp/
 tmp-*/
 build-nsmux/
+build-nsmux-dev/

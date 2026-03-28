@@ -264,6 +264,7 @@ extension Workspace {
         restoredTerminalScrollbackByPanelId.removeAll(keepingCapacity: false)
         cachedRestoreCommandByPanelId.removeAll(keepingCapacity: false)
         pendingRestoreCommandByPanelId.removeAll(keepingCapacity: false)
+        pendingRestoreSurfaceReady.removeAll(keepingCapacity: false)
 
         let normalizedCurrentDirectory = snapshot.currentDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedCurrentDirectory.isEmpty {
@@ -684,23 +685,45 @@ extension Workspace {
 
     /// Called by TabManager when `.terminalSurfaceDidBecomeReady` fires.
     /// If the panel has a pending restore command (parked during session restore),
-    /// send it now that the shell is initializing.
+    /// note that the surface is ready but wait for the shell to reach promptIdle
+    /// before sending -- the surface being ready only means the GPU/view layer is
+    /// up, not that zsh has finished loading rc files.
     func drainPendingRestoreCommand(forSurfaceId surfaceId: UUID) {
         // surfaceId == TerminalSurface.id == TerminalPanel.id == panels key.
         let panelId = surfaceId
-        guard let command = pendingRestoreCommandByPanelId.removeValue(forKey: panelId) else { return }
+        guard pendingRestoreCommandByPanelId[panelId] != nil else { return }
         guard panels[panelId] is TerminalPanel else { return }
-        NSLog("[Workspace] drainPendingRestoreCommand: surface ready for panel %@, waiting for shell init (pending remaining: %d)",
-              panelId.uuidString, pendingRestoreCommandByPanelId.count)
-        // Wait for the shell to finish loading rc files (zshrc, nvm, prompt
-        // theme, etc.) before typing the command. 1.5s covers typical heavy
-        // setups like powerlevel10k + nvm.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self, let panel = self.panels[panelId] as? TerminalPanel else { return }
-            NSLog("[Workspace] drainPendingRestoreCommand: sending to panel %@: %@", panelId.uuidString, command)
-            panel.sendText(command)
-            panel.sendReturnKeyPress()
+
+        // If the shell is already at a prompt (fast init), send immediately.
+        if panelShellActivityStates[panelId] == .promptIdle {
+            fireRestoreCommand(forPanelId: panelId)
+            return
         }
+
+        // Otherwise mark as waiting -- updatePanelShellActivityState will fire it.
+        pendingRestoreSurfaceReady.insert(panelId)
+        NSLog("[Workspace] drainPendingRestoreCommand: surface ready for panel %@, waiting for shell promptIdle (pending remaining: %d)",
+              panelId.uuidString, pendingRestoreCommandByPanelId.count)
+
+        // Safety net: if report_shell_state never fires (shell integration not
+        // installed, or a non-zsh shell), fall back after 5 seconds.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            guard let self else { return }
+            if self.pendingRestoreCommandByPanelId[panelId] != nil {
+                NSLog("[Workspace] drainPendingRestoreCommand: timeout waiting for promptIdle on panel %@, sending anyway", panelId.uuidString)
+                self.fireRestoreCommand(forPanelId: panelId)
+            }
+        }
+    }
+
+    /// Actually send the parked restore command to the terminal surface.
+    private func fireRestoreCommand(forPanelId panelId: UUID) {
+        pendingRestoreSurfaceReady.remove(panelId)
+        guard let command = pendingRestoreCommandByPanelId.removeValue(forKey: panelId) else { return }
+        guard let panel = panels[panelId] as? TerminalPanel else { return }
+        NSLog("[Workspace] fireRestoreCommand: sending to panel %@: %@", panelId.uuidString, command)
+        panel.sendText(command)
+        panel.sendReturnKeyPress()
     }
 
     private func applySessionPanelMetadata(_ snapshot: SessionPanelSnapshot, toPanelId panelId: UUID) {
@@ -5608,6 +5631,8 @@ final class Workspace: Identifiable, ObservableObject {
     /// (non-selected workspaces are not mounted). Drained when
     /// `.terminalSurfaceDidBecomeReady` fires for the corresponding panel.
     private var pendingRestoreCommandByPanelId: [UUID: String] = [:]
+    /// Panels whose surface is ready but shell hasn't reached promptIdle yet.
+    private var pendingRestoreSurfaceReady: Set<UUID> = []
 
     /// True if any panels have restore commands waiting for their surface to become ready.
     var hasPendingRestoreCommands: Bool { !pendingRestoreCommandByPanelId.isEmpty }
@@ -6446,6 +6471,10 @@ final class Workspace: Identifiable, ObservableObject {
             "panel=\(panelId.uuidString.prefix(5)) from=\(previousState.rawValue) to=\(state.rawValue)"
         )
 #endif
+        // If a restore command is waiting for this shell to become ready, fire it now.
+        if state == .promptIdle && pendingRestoreSurfaceReady.contains(panelId) {
+            fireRestoreCommand(forPanelId: panelId)
+        }
     }
 
     func panelNeedsConfirmClose(panelId: UUID, fallbackNeedsConfirmClose: Bool) -> Bool {
