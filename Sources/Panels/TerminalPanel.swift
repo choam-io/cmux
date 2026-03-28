@@ -198,7 +198,6 @@ final class TerminalPanel: Panel, ObservableObject {
     func sendReturnKeyPress() {
         surface.sendReturnKeyPress()
     }
-    }
 
     func performBindingAction(_ action: String) -> Bool {
         surface.performBindingAction(action)

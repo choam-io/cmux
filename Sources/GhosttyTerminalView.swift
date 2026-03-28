@@ -3963,8 +3963,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         var previousWasCR = false
         for scalar in text.unicodeScalars {
             switch scalar.value {
-            case 0x0A: // 
- — skip if preceded by  (already sent Return)
+            case 0x0A: // \n — skip if preceded by \r (already sent Return)
                 if !previousWasCR {
                     flushText(&bufferedText, surface: surface)
                     sendKeyEvent(surface: surface, keycode: 0x24) // kVK_Return
