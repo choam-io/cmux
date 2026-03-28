@@ -2323,6 +2323,15 @@ class GhosttyApp {
                    workspace.panels[callbackSurfaceId] != nil {
                     manager.closePanelAfterChildExited(tabId: callbackTabId, surfaceId: callbackSurfaceId)
                 }
+
+                // Notify popup (or other non-TabManager owners) that a child exited.
+                if let callbackSurfaceId {
+                    NotificationCenter.default.post(
+                        name: .cmuxChildExited,
+                        object: nil,
+                        userInfo: ["surfaceId": callbackSurfaceId]
+                    )
+                }
             }
             // Always report handled so Ghostty doesn't print the fallback prompt.
             return true
@@ -6862,6 +6871,7 @@ extension Notification.Name {
     static let ghosttyConfigDidReload = Notification.Name("ghosttyConfigDidReload")
     static let ghosttyDefaultBackgroundDidChange = Notification.Name("ghosttyDefaultBackgroundDidChange")
     static let browserSearchFocus = Notification.Name("browserSearchFocus")
+    static let cmuxChildExited = Notification.Name("cmux.childExited")
 }
 
 // MARK: - Scroll View Wrapper (Ghostty-style scrollbar)

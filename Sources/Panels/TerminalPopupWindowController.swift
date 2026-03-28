@@ -31,8 +31,10 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     private weak var parentWindow: NSWindow?
     private var isShowing = false
     private var terminalInitialized = false
+    private var shellExited = false
     private var parentFrameObservation: NSObjectProtocol?
     private var parentMoveObservation: NSObjectProtocol?
+    private var childExitObservation: NSObjectProtocol?
     private var containerView: PopupContainerView?
 
     // MARK: - Init
@@ -48,6 +50,9 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             NotificationCenter.default.removeObserver(obs)
         }
         if let obs = parentMoveObservation {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        if let obs = childExitObservation {
             NotificationCenter.default.removeObserver(obs)
         }
     }
@@ -67,7 +72,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
         // If the terminal's shell has exited (e.g. workmux dashboard quit),
         // tear down and reinitialise so the user gets a fresh command.
-        if terminalInitialized, let surface = terminalSurface, !surface.hasLiveSurface {
+        if terminalInitialized && shellExited {
             teardownTerminal()
         }
 
@@ -213,10 +218,31 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         panelContentView.layer?.insertSublayer(shadowLayer, at: 0)
 
         self.terminalInitialized = true
+
+        // Listen for child exit so we know to reinit on next show()
+        let surfaceId = surface.id
+        self.childExitObservation = NotificationCenter.default.addObserver(
+            forName: .cmuxChildExited,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let exitedId = notification.userInfo?["surfaceId"] as? UUID,
+                  exitedId == surfaceId else { return }
+            self.shellExited = true
+            // If currently showing, hide immediately -- the shell is dead
+            if self.isShowing {
+                self.hide()
+            }
+        }
     }
 
     private func teardownTerminal() {
         stopTrackingParentFrame()
+        if let obs = childExitObservation {
+            NotificationCenter.default.removeObserver(obs)
+            childExitObservation = nil
+        }
         if let panel {
             panel.parent?.removeChildWindow(panel)
             panel.orderOut(nil)
@@ -226,6 +252,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         terminalSurface = nil
         panel = nil
         terminalInitialized = false
+        shellExited = false
         isShowing = false
     }
 
