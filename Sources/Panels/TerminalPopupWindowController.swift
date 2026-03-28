@@ -308,4 +308,10 @@ private class PopupContainerView: NSView {
 private class TerminalPopupPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        // Swallow ESC so it passes through to the terminal (ratatui TUIs, etc.)
+        // instead of triggering NSWindow's default performClose:.
+        // The popup is dismissed only via the prefix-key toggle (prefix+i).
+    }
 }
