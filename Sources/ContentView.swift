@@ -2623,7 +2623,7 @@ struct ContentView: View {
                 }
 
                 Text(titlebarText)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(Font(SidebarFontHelper.sidebarTitleFont(size: 13, weight: .bold)))
                     .foregroundColor(fakeTitlebarTextColor)
                     .lineLimit(1)
                     .allowsHitTesting(false)
