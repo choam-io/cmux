@@ -8757,7 +8757,7 @@ struct VerticalTabsSidebar: View {
 
     var body: some View {
         let allWorkspaceCount = tabManager.tabs.count
-        let visibleWorkspaceCount = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }.count
+        let visibleWorkspaceCount = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) && !PersistentWorkspaceManager.shared.isPersistentWorkspace($0.id) }.count
         let workspaceCount = visibleWorkspaceCount
         let canCloseWorkspace = allWorkspaceCount > 1
         let workspaceNumberShortcut = self.workspaceNumberShortcut
@@ -8771,7 +8771,7 @@ struct VerticalTabsSidebar: View {
                             .frame(height: trafficLightPadding)
 
                         LazyVStack(spacing: tabRowSpacing) {
-                            let visibleTabs = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }
+                            let visibleTabs = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) && !PersistentWorkspaceManager.shared.isPersistentWorkspace($0.id) }
                             ForEach(Array(visibleTabs.enumerated()), id: \.element.id) { index, tab in
                                 let selectedContextIds: Set<UUID> = selectedTabIds.contains(tab.id) ? selectedTabIds : [tab.id]
                                 let contextTargetIds = tabManager.tabs.compactMap { workspace in
