@@ -3,29 +3,32 @@ import Bonsplit
 import Combine
 import WebKit
 
-/// In-window popup overlay with tabbed panels. Panels can be terminals,
-/// browsers, or any view. Rendered as an NSPanel child window so it
-/// appears above Ghostty's Metal terminal layers.
+/// Guake-style global dropdown terminal with tabbed panels.
+/// Drops down from the top of the screen, toggled via a global hotkey.
+/// Panels can be terminals, browsers, or any view.
 ///
 /// Behavior:
-/// - Centered within the parent cmux window, not floating on desktop
-/// - Moves and resizes with the parent window
-/// - Panels persist between show/hide (Quake-style)
-/// - Toggle keybind (prefix+i) shows/hides
+/// - Full-width dropdown from the top of the active screen
+/// - Global hotkey (Cmd+') works from any app
+/// - Panels persist between show/hide
+/// - Float above all windows
+/// - Slight transparency + slide animation
 /// - Ctrl+Tab / Ctrl+Shift+Tab cycles tabs
-/// - Cmd+W closes current tab (hides popup if last tab)
+/// - Cmd+T new terminal, Cmd+Shift+T new browser, Cmd+W close tab
+/// - prefix+0..9 selects tab by index
 @MainActor
 final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Configuration
 
     struct Config {
-        var widthPercent: CGFloat = 0.8
-        var heightPercent: CGFloat = 0.8
-        var minWidth: CGFloat = 400
+        /// Height as percentage of screen height (0.0 - 1.0)
+        var heightPercent: CGFloat = 0.45
         var minHeight: CGFloat = 300
         var workingDirectory: String? = nil
         var initialCommand: String? = nil
+        /// Background transparency (0.0 = fully transparent, 1.0 = opaque)
+        var backgroundOpacity: CGFloat = 0.92
     }
 
     // MARK: - Popup Tab
@@ -78,16 +81,15 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     private(set) var tabs: [PopupTab] = []
     private(set) var selectedTabIndex: Int = 0
     private var config: Config
-    private weak var parentWindow: NSWindow?
     private var isShowing = false
     private var panelInitialized = false
-    private var parentFrameObservation: NSObjectProtocol?
-    private var parentMoveObservation: NSObjectProtocol?
     private var childExitObservations: [UUID: NSObjectProtocol] = [:]
     private var containerView: PopupContainerView?
     private var tabBarView: PopupTabBarView?
     private var contentArea: NSView?
     private var browserTitleObservers: [UUID: NSKeyValueObservation] = [:]
+    private var globalHotkeyMonitor: Any?
+    private var localHotkeyMonitor: Any?
 
     var selectedTab: PopupTab? {
         guard selectedTabIndex >= 0, selectedTabIndex < tabs.count else { return nil }
@@ -96,22 +98,56 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Init
 
-    init(parentWindow: NSWindow?, config: Config = Config()) {
+    init(config: Config = Config()) {
         self.config = config
-        self.parentWindow = parentWindow
         super.init()
+        installGlobalHotkey()
     }
 
     deinit {
+        if let monitor = globalHotkeyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = localHotkeyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
         for obs in childExitObservations.values {
             NotificationCenter.default.removeObserver(obs)
         }
-        if let obs = parentFrameObservation {
-            NotificationCenter.default.removeObserver(obs)
+    }
+
+    // MARK: - Global Hotkey (Cmd+')
+
+    private func installGlobalHotkey() {
+        // Global monitor: fires when nsmux is NOT the active app
+        globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if Self.isDropdownHotkey(event) {
+                Task { @MainActor in
+                    self?.toggle()
+                }
+            }
         }
-        if let obs = parentMoveObservation {
-            NotificationCenter.default.removeObserver(obs)
+
+        // Local monitor: fires when nsmux IS the active app
+        localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if Self.isDropdownHotkey(event) {
+                Task { @MainActor in
+                    self?.toggle()
+                }
+                return nil // consume
+            }
+            return event
         }
+    }
+
+    /// Check if event is Cmd+' (key code 39)
+    private static func isDropdownHotkey(_ event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return flags.contains(.command)
+            && !flags.contains(.control)
+            && !flags.contains(.option)
+            && !flags.contains(.shift)
+            && event.keyCode == 39 // apostrophe
     }
 
     // MARK: - Public API
@@ -125,8 +161,6 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        guard let parentWindow else { return }
-
         if !panelInitialized {
             initializePanel()
         }
@@ -143,35 +177,50 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
         guard let panel else { return }
 
-        let popupFrame = computePopupFrame(in: parentWindow)
-        panel.setFrame(popupFrame, display: false)
-
-        if panel.parent == nil {
-            parentWindow.addChildWindow(panel, ordered: .above)
-        }
-
-        panel.alphaValue = 0
+        // Position at top of screen
+        let frame = computeDropdownFrame()
+        // Start off-screen (above top) for slide animation
+        let startFrame = NSRect(
+            x: frame.origin.x,
+            y: frame.origin.y + frame.height,
+            width: frame.width,
+            height: frame.height
+        )
+        panel.setFrame(startFrame, display: false)
+        panel.alphaValue = 1
         panel.makeKeyAndOrderFront(nil)
+
+        // Bring nsmux to front
+        NSApp.activate(ignoringOtherApps: true)
+
+        // Slide down animation
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            panel.animator().alphaValue = 1
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(frame, display: true)
         }
 
         isShowing = true
         focusSelectedTab()
-        startTrackingParentFrame()
     }
 
     func hide() {
         guard let panel, isShowing else { return }
 
-        stopTrackingParentFrame()
+        let frame = panel.frame
+        let offscreenFrame = NSRect(
+            x: frame.origin.x,
+            y: frame.origin.y + frame.height,
+            width: frame.width,
+            height: frame.height
+        )
+
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.12
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().setFrame(offscreenFrame, display: true)
+        }, completionHandler: {
             panel.orderOut(nil)
-            self?.parentWindow?.makeKeyAndOrderFront(nil)
         })
 
         isShowing = false
@@ -317,12 +366,12 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     // MARK: - Panel Setup
 
     private func initializePanel() {
-        guard !panelInitialized, let parentWindow else { return }
+        guard !panelInitialized else { return }
 
-        let popupFrame = computePopupFrame(in: parentWindow)
+        let frame = computeDropdownFrame()
         let newPanel = TerminalPopupPanel(
-            contentRect: popupFrame,
-            styleMask: [.borderless],
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -330,20 +379,26 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         newPanel.isOpaque = false
         newPanel.hasShadow = true
         newPanel.backgroundColor = .clear
-        newPanel.level = parentWindow.level
-        newPanel.collectionBehavior = [.fullScreenAuxiliary]
+        newPanel.level = .floating
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.hidesOnDeactivate = false
         newPanel.delegate = self
         newPanel.popupController = self
+        // Allow the panel to become key even though it's nonactivating
+        newPanel.becomesKeyOnlyIfNeeded = false
         self.panel = newPanel
 
         // Build visual container
         let container = PopupContainerView()
         container.wantsLayer = true
-        container.layer?.cornerRadius = 10
+        container.layer?.cornerRadius = 0
+        container.layer?.cornerCurve = .continuous
+        // Round only bottom corners
+        container.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner,
+                                          .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         container.layer?.masksToBounds = true
-        container.layer?.borderWidth = 1.5
-        container.layer?.borderColor = NSColor.separatorColor.cgColor
+        container.layer?.borderWidth = 0
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(config.backgroundOpacity).cgColor
         self.containerView = container
 
         // Tab bar at top
@@ -366,10 +421,11 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         panelContentView.addSubview(container)
 
         NSLayoutConstraint.activate([
-            container.topAnchor.constraint(equalTo: panelContentView.topAnchor, constant: 8),
-            container.leadingAnchor.constraint(equalTo: panelContentView.leadingAnchor, constant: 8),
-            container.trailingAnchor.constraint(equalTo: panelContentView.trailingAnchor, constant: -8),
-            container.bottomAnchor.constraint(equalTo: panelContentView.bottomAnchor, constant: -8),
+            // No margin -- full bleed to panel edges
+            container.topAnchor.constraint(equalTo: panelContentView.topAnchor),
+            container.leadingAnchor.constraint(equalTo: panelContentView.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: panelContentView.trailingAnchor),
+            container.bottomAnchor.constraint(equalTo: panelContentView.bottomAnchor),
 
             tabBar.topAnchor.constraint(equalTo: container.topAnchor),
             tabBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -382,12 +438,12 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
-        // Shadow
+        // Bottom edge shadow
         let shadowLayer = CALayer()
         shadowLayer.shadowColor = NSColor.black.cgColor
-        shadowLayer.shadowOpacity = 0.4
-        shadowLayer.shadowOffset = CGSize(width: 0, height: -2)
-        shadowLayer.shadowRadius = 12
+        shadowLayer.shadowOpacity = 0.5
+        shadowLayer.shadowOffset = CGSize(width: 0, height: -4)
+        shadowLayer.shadowRadius = 16
         panelContentView.layer?.insertSublayer(shadowLayer, at: 0)
 
         panelInitialized = true
@@ -432,6 +488,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     private func focusSelectedTab() {
         guard let panel, isShowing, let tab = selectedTab else { return }
         if let focusable = tab.focusableView {
+            panel.makeKey()
             panel.makeFirstResponder(focusable)
         }
     }
@@ -517,14 +574,12 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     // MARK: - Teardown
 
     private func teardownAll() {
-        stopTrackingParentFrame()
         for obs in childExitObservations.values {
             NotificationCenter.default.removeObserver(obs)
         }
         childExitObservations.removeAll()
         browserTitleObservers.removeAll()
         if let panel {
-            panel.parent?.removeChildWindow(panel)
             panel.orderOut(nil)
         }
         for tab in tabs {
@@ -542,69 +597,35 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Geometry
 
-    private func computePopupFrame(in parentWindow: NSWindow) -> NSRect {
-        let parentFrame = parentWindow.frame
-        let parentContent = parentWindow.contentRect(forFrameRect: parentFrame)
+    private func computeDropdownFrame() -> NSRect {
+        // Use the screen with the mouse cursor (or main screen)
+        let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first!
 
-        let width = max(config.minWidth, parentContent.width * config.widthPercent)
-        let height = max(config.minHeight, parentContent.height * config.heightPercent)
+        let visibleFrame = screen.visibleFrame
+        let screenFrame = screen.frame
 
-        let x = parentContent.midX - width / 2
-        let y = parentContent.midY - height / 2
+        let height = max(config.minHeight, screenFrame.height * config.heightPercent)
+        let width = screenFrame.width
+
+        // Top of screen (visibleFrame.maxY is the top below the menu bar)
+        let x = screenFrame.minX
+        let y = visibleFrame.maxY - height
 
         return NSRect(x: x, y: y, width: width, height: height)
-    }
-
-    // MARK: - Parent Frame Tracking
-
-    private func startTrackingParentFrame() {
-        stopTrackingParentFrame()
-        guard let parentWindow else { return }
-
-        parentFrameObservation = NotificationCenter.default.addObserver(
-            forName: NSWindow.didResizeNotification,
-            object: parentWindow,
-            queue: .main
-        ) { [weak self] _ in
-            self?.repositionToParent()
-        }
-
-        parentMoveObservation = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMoveNotification,
-            object: parentWindow,
-            queue: .main
-        ) { [weak self] _ in
-            self?.repositionToParent()
-        }
-    }
-
-    private func stopTrackingParentFrame() {
-        if let obs = parentFrameObservation {
-            NotificationCenter.default.removeObserver(obs)
-            parentFrameObservation = nil
-        }
-        if let obs = parentMoveObservation {
-            NotificationCenter.default.removeObserver(obs)
-            parentMoveObservation = nil
-        }
-    }
-
-    private func repositionToParent() {
-        guard let parentWindow, let panel, isShowing else { return }
-        let popupFrame = computePopupFrame(in: parentWindow)
-        panel.setFrame(popupFrame, display: true)
     }
 
     // MARK: - NSWindowDelegate
 
     func windowDidResignKey(_ notification: Notification) {
-        // Don't auto-hide on focus loss
+        // Don't auto-hide on focus loss -- user must toggle with hotkey
     }
 }
 
 // MARK: - Tab Bar View
 
-/// Minimal tab bar for the popup: horizontal row of pill-shaped tab buttons.
+/// Minimal tab bar: horizontal row of pill-shaped tab buttons with index numbers.
 @MainActor
 final class PopupTabBarView: NSView {
     private weak var controller: TerminalPopupWindowController?
@@ -672,8 +693,8 @@ final class PopupTabBarView: NSView {
             ]
             let icon = NSImage(systemSymbolName: tab.iconSystemName, accessibilityDescription: nil)
                 ?? NSImage(systemSymbolName: "square", accessibilityDescription: nil)!
-            let config = NSImage.SymbolConfiguration(pointSize: 10, weight: isSelected ? .semibold : .regular)
-            let tinted = icon.withSymbolConfiguration(config)!
+            let symbolConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: isSelected ? .semibold : .regular)
+            let tinted = icon.withSymbolConfiguration(symbolConfig)!
 
             button.image = tinted
             button.imagePosition = .imageLeading
@@ -713,19 +734,19 @@ final class PopupTabBarView: NSView {
 
 // MARK: - PopupContainerView
 
-/// Container view with rounded corners.
+/// Container view for the dropdown.
 private class PopupContainerView: NSView {
     override var isFlipped: Bool { true }
 
     override func updateLayer() {
         super.updateLayer()
-        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
     }
 }
 
 // MARK: - TerminalPopupPanel
 
-/// NSPanel subclass that intercepts tab-cycling shortcuts.
+/// NSPanel subclass for the dropdown. Intercepts tab-cycling shortcuts via sendEvent.
 private class TerminalPopupPanel: NSPanel {
     weak var popupController: TerminalPopupWindowController?
 
@@ -733,7 +754,7 @@ private class TerminalPopupPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func cancelOperation(_ sender: Any?) {
-        // Swallow ESC -- popup is dismissed only via prefix+i
+        // Swallow ESC -- popup is dismissed only via hotkey
     }
 
     override func sendEvent(_ event: NSEvent) {
@@ -762,8 +783,12 @@ private class TerminalPopupPanel: NSPanel {
             }
 
             // Cmd+T to add a new terminal tab (no other modifiers)
-            if hasCmd && !hasCtrl && !hasOpt && event.charactersIgnoringModifiers == "t" {
-                popupController?.addTerminalTab()
+            if hasCmd && !hasCtrl && !hasOpt && event.charactersIgnoringModifiers?.lowercased() == "t" {
+                if hasShift {
+                    TerminalController.shared.popupPromptBrowserTab()
+                } else {
+                    popupController?.addTerminalTab()
+                }
                 return
             }
         }

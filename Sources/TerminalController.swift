@@ -6677,8 +6677,7 @@ class TerminalController {
             cwd: nil,
             command: command,
             widthPct: nil,
-            heightPct: nil,
-            parentWindow: parentWindow
+            heightPct: nil
         )
         controller.toggle()
     }
@@ -6742,17 +6741,14 @@ class TerminalController {
     private func v2PopupToggle(params: [String: Any]) -> V2CallResult {
         let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
         let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-        
 
         v2MainSync {
             let controller = getOrCreatePopupController(
                 cwd: cwd,
                 command: command,
-                widthPct: widthPct,
-                heightPct: heightPct,
-                
+                widthPct: nil,
+                heightPct: heightPct
             )
             controller.toggle()
         }
@@ -6762,17 +6758,14 @@ class TerminalController {
     private func v2PopupShow(params: [String: Any]) -> V2CallResult {
         let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
         let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-        
 
         v2MainSync {
             let controller = getOrCreatePopupController(
                 cwd: cwd,
                 command: command,
-                widthPct: widthPct,
-                heightPct: heightPct,
-                
+                widthPct: nil,
+                heightPct: heightPct
             )
             controller.show()
         }
@@ -6825,8 +6818,7 @@ class TerminalController {
         cwd: String?,
         command: String?,
         widthPct: Double?,
-        heightPct: Double?,
-        parentWindow: NSWindow? = nil
+        heightPct: Double?
     ) -> TerminalPopupWindowController {
         if let existing = popupController {
             return existing
@@ -6834,14 +6826,9 @@ class TerminalController {
         var config = TerminalPopupWindowController.Config()
         config.workingDirectory = cwd
         config.initialCommand = command
-        if let widthPct { config.widthPercent = CGFloat(widthPct) }
         if let heightPct { config.heightPercent = CGFloat(heightPct) }
 
-        let resolvedParent = parentWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
-        let controller = TerminalPopupWindowController(
-            parentWindow: resolvedParent,
-            config: config
-        )
+        let controller = TerminalPopupWindowController(config: config)
         popupController = controller
         return controller
     }
