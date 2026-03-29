@@ -2305,6 +2305,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Install prefix key mode observer for tmux-style shortcuts
         installPrefixKeyModeObserver()
 
+        // Initialize the global dropdown terminal so Cmd+' hotkey is registered
+        TerminalController.shared.initializeDropdown()
+
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handleThemesReloadNotification(_:)),
@@ -2984,6 +2987,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             ) {
                 primaryWindow.setFrame(restoredFrame, display: true)
             }
+            // No session to restore -- auto-launch persistent workspaces now.
+            PersistentWorkspaceManager.shared.autoLaunch(tabManager: primaryContext.tabManager)
         }
 
         if let startupSnapshot {
@@ -3020,6 +3025,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Don't save immediately after restore -- the restored state may be degraded
         // if some panels failed to create. The autosave timer (every 8s) will capture
         // the state once everything has settled.
+
+        // Auto-launch persistent workspaces that aren't already restored from session.
+        if let tabManager {
+            PersistentWorkspaceManager.shared.autoLaunch(tabManager: tabManager)
+        }
     }
 
     private func applySessionWindowSnapshot(
@@ -9135,6 +9145,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func handleCustomShortcut(event: NSEvent) -> Bool {
         // Prefix key mode: tmux-style prefix+key shortcuts
+        // Must run even when popup is focused (prefix+i toggles popup)
+        if handlePrefixKeyMode(event: event) {
+            return true
+        }
+
+        // If the popup overlay is focused, handle its tab shortcuts here
+        // (consuming the event) so the main menu doesn't steal them.
+        if let keyWindow = NSApp.keyWindow,
+           keyWindow.identifier?.rawValue == "cmux.terminal-popup" {
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let hasCmd = flags.contains(.command)
+            let hasCtrl = flags.contains(.control)
+            let hasOpt = flags.contains(.option)
+            let chars = event.charactersIgnoringModifiers
+
+            if hasCmd && !hasCtrl && !hasOpt && chars?.lowercased() == "t" {
+                let hasShift = flags.contains(.shift)
+                if hasShift {
+                    TerminalController.shared.popupPromptBrowserTab()
+                } else {
+                    TerminalController.shared.popupAddTerminalTab()
+                }
+                return true
+            }
+            if hasCmd && !hasCtrl && !hasOpt && chars == "w" {
+                TerminalController.shared.popupCloseSelectedTab()
+                return true
+            }
+            if hasCtrl && event.keyCode == 48 /* Tab */ {
+                if flags.contains(.shift) {
+                    TerminalController.shared.popupSelectPreviousTab()
+                } else {
+                    TerminalController.shared.popupSelectNextTab()
+                }
+                return true
+            }
+            return false
+        }
+
+        // Direct key bindings: Ctrl+h/j/k/l pane navigation (no prefix required)
         if handlePrefixKeyMode(event: event) {
             return true
         }

@@ -30,18 +30,7 @@ struct WebAppDefinition: Codable, Identifiable, Equatable, Sendable {
 // MARK: - Built-in Web Apps
 
 extension WebAppDefinition {
-    /// Slack webapp. Uses app.slack.com which supports SSO/Okta redirects natively.
-    static let slack = WebAppDefinition(
-        id: "slack",
-        displayName: "Slack",
-        iconSystemName: "number.square.fill",
-        url: URL(string: "https://app.slack.com")!,
-        notificationHookScript: WebAppNotificationHook.slackHookScript,
-        isBuiltIn: true
-    )
-
-    /// All built-in web app definitions.
-    static let builtInApps: [WebAppDefinition] = [
-        .slack,
-    ]
+    /// Built-in web app definitions. Deprecated -- use ~/.config/cmux/workspaces.yaml instead.
+    /// Kept empty so existing code paths (WebAppManager.availableApps) still compile.
+    static let builtInApps: [WebAppDefinition] = []
 }

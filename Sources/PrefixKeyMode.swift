@@ -113,9 +113,6 @@ final class PrefixKeyMode {
         // Popup terminal
         "i": .togglePopup,     // prefix+i = toggle popup terminal
         
-        // Web apps
-        "S": .toggleWebApp,    // prefix+S (shift+s) = toggle web app (Slack, etc.)
-        
         // Misc
         "t": .newSurface,      // prefix+t = new tab/surface
         "?": .triggerFlash,    // prefix+? = flash to find cursor
@@ -171,12 +168,24 @@ final class PrefixKeyMode {
             return false
         }
         
-        // Handle number keys for workspace selection (1-9)
-        if let digit = Int(key), (1...9).contains(digit) {
-            postWorkspaceSelection(digit)
-            return true
+        // Handle number keys: popup tab selection (0-9) when popup visible,
+        // otherwise workspace selection (1-9)
+        if let digit = Int(key), digit >= 0 && digit <= 9 {
+            if TerminalController.shared.isPopupVisible {
+                postPopupTabSelection(digit)
+                return true
+            } else if digit >= 1 {
+                postWorkspaceSelection(digit)
+                return true
+            }
         }
         
+        // Check persistent workspace shortcuts (from workspaces.yaml)
+        if PersistentWorkspaceConfigStore.activeShortcutKeys.contains(key) {
+            postPersistentWorkspaceToggle(key)
+            return true
+        }
+
         // Look up the action
         if let action = Self.defaultBindings[key] ?? Self.defaultBindings[key.lowercased()] {
             postAction(action)
@@ -231,6 +240,28 @@ final class PrefixKeyMode {
         )
         #if DEBUG
         dlog("prefix.selectWorkspace: \(number)")
+        #endif
+    }
+
+    private func postPersistentWorkspaceToggle(_ shortcutKey: String) {
+        NotificationCenter.default.post(
+            name: Self.performActionNotification,
+            object: nil,
+            userInfo: ["togglePersistentWorkspace": shortcutKey]
+        )
+        #if DEBUG
+        dlog("prefix.togglePersistentWorkspace: \(shortcutKey)")
+        #endif
+    }
+
+    private func postPopupTabSelection(_ index: Int) {
+        NotificationCenter.default.post(
+            name: Self.performActionNotification,
+            object: nil,
+            userInfo: ["selectPopupTab": index]
+        )
+        #if DEBUG
+        dlog("prefix.selectPopupTab: \(index)")
         #endif
     }
     

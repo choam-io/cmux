@@ -2179,6 +2179,8 @@ class TerminalController {
             return v2Result(id: id, self.v2PopupHide())
         case "popup.close":
             return v2Result(id: id, self.v2PopupClose())
+        case "popup.add_tab":
+            return v2Result(id: id, self.v2PopupAddTab(params: params))
 
         // App focus
         case "app.focus_override.set":
@@ -2507,6 +2509,7 @@ class TerminalController {
             "popup.show",
             "popup.hide",
             "popup.close",
+            "popup.add_tab",
             "app.focus_override.set",
             "app.simulate_active",
             "markdown.open",
@@ -6668,32 +6671,76 @@ class TerminalController {
 
     // MARK: - Popup Terminal
 
+    /// Initialize the dropdown eagerly so the global Cmd+' hotkey is registered at startup.
+    func initializeDropdown() {
+        _ = getOrCreatePopupController(
+            cwd: nil,
+            command: "/bin/zsh -lic '$HOME/.cargo/bin/workmux dashboard'",
+            widthPct: nil,
+            heightPct: nil
+        )
+    }
+
     /// Called from prefix key mode or other direct invocations (not via socket).
     func togglePopup(parentWindow: NSWindow?, command: String? = nil) {
         let controller = getOrCreatePopupController(
             cwd: nil,
             command: command,
             widthPct: nil,
-            heightPct: nil,
-            parentWindow: parentWindow
+            heightPct: nil
         )
         controller.toggle()
+    }
+
+    // MARK: - Popup Tab Forwarding (called from AppDelegate shortcut handler)
+
+    func popupAddTerminalTab() {
+        popupController?.addTerminalTab()
+    }
+
+    func popupAddBrowserTab(url: URL, title: String? = nil) {
+        popupController?.addBrowserTab(url: url, title: title)
+    }
+
+    func popupPromptBrowserTab() {
+        // Open a blank browser tab directly -- address bar is inline
+        popupController?.addBrowserTab(url: URL(string: "about:blank")!, title: "New tab")
+    }
+
+    func popupCloseSelectedTab() {
+        popupController?.closeSelectedTab()
+    }
+
+    func popupSelectNextTab() {
+        popupController?.selectNextTab()
+    }
+
+    func popupSelectPreviousTab() {
+        popupController?.selectPreviousTab()
+    }
+
+    func popupSelectTab(at index: Int) {
+        popupController?.selectTab(at: index)
+    }
+
+    nonisolated var isPopupVisible: Bool {
+        // Safe to read -- only checks a Bool on the controller
+        MainActor.assumeIsolated {
+            popupController?.isVisible ?? false
+        }
     }
 
     private func v2PopupToggle(params: [String: Any]) -> V2CallResult {
         let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
         let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-        
 
         v2MainSync {
             let controller = getOrCreatePopupController(
                 cwd: cwd,
                 command: command,
-                widthPct: widthPct,
-                heightPct: heightPct,
-                
+                widthPct: nil,
+                heightPct: heightPct
             )
             controller.toggle()
         }
@@ -6703,17 +6750,14 @@ class TerminalController {
     private func v2PopupShow(params: [String: Any]) -> V2CallResult {
         let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let widthPct = (params["width_percent"] as? NSNumber)?.doubleValue
         let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-        
 
         v2MainSync {
             let controller = getOrCreatePopupController(
                 cwd: cwd,
                 command: command,
-                widthPct: widthPct,
-                heightPct: heightPct,
-                
+                widthPct: nil,
+                heightPct: heightPct
             )
             controller.show()
         }
@@ -6735,12 +6779,38 @@ class TerminalController {
         return .ok([:])
     }
 
+    private func v2PopupAddTab(params: [String: Any]) -> V2CallResult {
+        let type = v2RawString(params, "type")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "terminal"
+        let title = v2RawString(params, "title")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let urlString = v2RawString(params, "url")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pinned = v2Bool(params, "pinned") ?? false
+
+        v2MainSync {
+            let controller = getOrCreatePopupController(
+                cwd: nil, command: nil, widthPct: nil, heightPct: nil
+            )
+            if !controller.isVisible {
+                controller.show()
+            }
+
+            switch type {
+            case "browser":
+                guard let urlString, let url = URL(string: urlString) else { break }
+                controller.addBrowserTab(url: url, title: title)
+            default:
+                controller.addTerminalTab(command: command, cwd: cwd, title: title, pinned: pinned)
+            }
+        }
+        return .ok([:])
+    }
+
     private func getOrCreatePopupController(
         cwd: String?,
         command: String?,
         widthPct: Double?,
-        heightPct: Double?,
-        parentWindow: NSWindow? = nil
+        heightPct: Double?
     ) -> TerminalPopupWindowController {
         if let existing = popupController {
             return existing
@@ -6748,14 +6818,9 @@ class TerminalController {
         var config = TerminalPopupWindowController.Config()
         config.workingDirectory = cwd
         config.initialCommand = command
-        if let widthPct { config.widthPercent = CGFloat(widthPct) }
         if let heightPct { config.heightPercent = CGFloat(heightPct) }
 
-        let resolvedParent = parentWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
-        let controller = TerminalPopupWindowController(
-            parentWindow: resolvedParent,
-            config: config
-        )
+        let controller = TerminalPopupWindowController(config: config)
         popupController = controller
         return controller
     }

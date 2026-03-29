@@ -1872,9 +1872,35 @@ struct ContentView: View {
         let subtitle: String
         let shortcutHint: String?
         let kindLabel: String?
+        /// SF Symbol name shown before the title (e.g. persistent workspace icon).
+        let iconSystemName: String?
         let keywords: [String]
         let dismissOnRun: Bool
         let action: () -> Void
+
+        init(
+            id: String,
+            rank: Int,
+            title: String,
+            subtitle: String,
+            shortcutHint: String? = nil,
+            kindLabel: String? = nil,
+            iconSystemName: String? = nil,
+            keywords: [String],
+            dismissOnRun: Bool,
+            action: @escaping () -> Void
+        ) {
+            self.id = id
+            self.rank = rank
+            self.title = title
+            self.subtitle = subtitle
+            self.shortcutHint = shortcutHint
+            self.kindLabel = kindLabel
+            self.iconSystemName = iconSystemName
+            self.keywords = keywords
+            self.dismissOnRun = dismissOnRun
+            self.action = action
+        }
 
         var searchableTexts: [String] {
             [title, subtitle] + keywords
@@ -2623,7 +2649,7 @@ struct ContentView: View {
                 }
 
                 Text(titlebarText)
-                    .font(Font(SidebarFontHelper.sidebarTitleFont(size: 13, weight: .bold)))
+                    .font(NerdFontHelper.swiftUIFont(size: 13, weight: .bold))
                     .foregroundColor(fakeTitlebarTextColor)
                     .lineLimit(1)
                     .allowsHitTesting(false)
@@ -3817,14 +3843,28 @@ struct ContentView: View {
                             Button {
                                 runCommandPaletteResult(commandID: result.id)
                             } label: {
-                                HStack(spacing: 8) {
+                                HStack(spacing: 6) {
+                                    if let iconName = result.command.iconSystemName {
+                                        Image(systemName: iconName)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 16)
+                                    }
                                     commandPaletteHighlightedTitleText(
                                         result.command.title,
                                         matchedIndices: result.titleMatchIndices
                                     )
-                                        .font(.system(size: 13, weight: .regular))
+                                        .font(NerdFontHelper.swiftUIFont(size: 13, weight: .regular))
                                         .lineLimit(1)
                                     Spacer()
+
+                                    if let kindLabel = result.command.kindLabel, result.command.shortcutHint != nil {
+                                        // Show kind label before shortcut pill when both are present
+                                        Text(kindLabel)
+                                            .font(.system(size: 11, weight: .regular))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
 
                                     if let trailingLabel = commandPaletteTrailingLabel(for: result.command) {
                                         switch trailingLabel.style {
@@ -3951,7 +3991,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             TextField(target.placeholder, text: $commandPaletteRenameDraft)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .regular))
+                .font(NerdFontHelper.swiftUIFont(size: 13, weight: .regular))
                 .tint(Color(nsColor: sidebarActiveForegroundNSColor(opacity: 1.0)))
                 .focused($isCommandPaletteRenameFocused)
                 .accessibilityIdentifier("CommandPaletteRenameField")
@@ -4002,7 +4042,7 @@ struct ContentView: View {
 
         return VStack(spacing: 0) {
             Text(nextName)
-                .font(.system(size: 13, weight: .regular))
+                .font(NerdFontHelper.swiftUIFont(size: 13, weight: .regular))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 9)
@@ -4201,7 +4241,7 @@ struct ContentView: View {
 
         func makeNSView(context: Context) -> CommandPaletteNativeTextField {
             let field = CommandPaletteNativeTextField(frame: .zero)
-            field.font = .systemFont(ofSize: 13)
+            field.font = NerdFontHelper.font(size: 13, weight: .regular)
             field.placeholderString = placeholder
             field.setAccessibilityIdentifier("CommandPaletteSearchField")
             field.delegate = context.coordinator
@@ -4938,6 +4978,30 @@ struct ContentView: View {
             for workspace in workspaces {
                 let workspaceName = workspaceDisplayName(workspace)
                 let workspaceCommandId = "switcher.workspace.\(workspace.id.uuidString.lowercased())"
+                let workspaceId = workspace.id
+
+                // Check if this workspace is a persistent workspace from config
+                let persistentDef = PersistentWorkspaceManager.shared.definition(forWorkspace: workspaceId)
+                // Also check legacy web app workspaces
+                let webAppDef = WebAppManager.shared.appForWorkspace(workspaceId)
+
+                let workspaceIcon: String?
+                let workspaceShortcutHint: String?
+                let workspaceKindLabel: String
+                if let persistentDef {
+                    workspaceIcon = persistentDef.icon
+                    workspaceShortcutHint = persistentDef.shortcut.map { "prefix+\($0)" }
+                    workspaceKindLabel = String(localized: "commandPalette.kind.persistentWorkspace", defaultValue: "Pinned")
+                } else if let webAppDef {
+                    workspaceIcon = webAppDef.iconSystemName
+                    workspaceShortcutHint = "prefix+S"
+                    workspaceKindLabel = String(localized: "commandPalette.kind.persistentWorkspace", defaultValue: "Pinned")
+                } else {
+                    workspaceIcon = nil
+                    workspaceShortcutHint = nil
+                    workspaceKindLabel = String(localized: "commandPalette.kind.workspace", defaultValue: "Workspace")
+                }
+
                 let workspaceKeywords = CommandPaletteSwitcherSearchIndexer.keywords(
                     baseKeywords: [
                         "workspace",
@@ -4945,19 +5009,20 @@ struct ContentView: View {
                         "go",
                         "open",
                         workspaceName
-                    ] + windowKeywords,
+                    ] + windowKeywords + (persistentDef != nil || webAppDef != nil ? ["pinned", "persistent"] : []),
                     metadata: commandPaletteWorkspaceSearchMetadata(for: workspace),
                     detail: .workspace
                 )
-                let workspaceId = workspace.id
+
                 entries.append(
                     CommandPaletteCommand(
                         id: workspaceCommandId,
                         rank: nextRank,
                         title: workspaceName,
                         subtitle: commandPaletteSwitcherSubtitle(base: String(localized: "commandPalette.switcher.workspaceLabel", defaultValue: "Workspace"), windowLabel: context.windowLabel),
-                        shortcutHint: nil,
-                        kindLabel: String(localized: "commandPalette.kind.workspace", defaultValue: "Workspace"),
+                        shortcutHint: workspaceShortcutHint,
+                        kindLabel: workspaceKindLabel,
+                        iconSystemName: workspaceIcon,
                         keywords: workspaceKeywords,
                         dismissOnRun: true,
                         action: {
@@ -8692,7 +8757,7 @@ struct VerticalTabsSidebar: View {
 
     var body: some View {
         let allWorkspaceCount = tabManager.tabs.count
-        let visibleWorkspaceCount = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }.count
+        let visibleWorkspaceCount = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) && !PersistentWorkspaceManager.shared.isPersistentWorkspace($0.id) }.count
         let workspaceCount = visibleWorkspaceCount
         let canCloseWorkspace = allWorkspaceCount > 1
         let workspaceNumberShortcut = self.workspaceNumberShortcut
@@ -8706,7 +8771,7 @@ struct VerticalTabsSidebar: View {
                             .frame(height: trafficLightPadding)
 
                         LazyVStack(spacing: tabRowSpacing) {
-                            let visibleTabs = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }
+                            let visibleTabs = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) && !PersistentWorkspaceManager.shared.isPersistentWorkspace($0.id) }
                             ForEach(Array(visibleTabs.enumerated()), id: \.element.id) { index, tab in
                                 let selectedContextIds: Set<UUID> = selectedTabIds.contains(tab.id) ? selectedTabIds : [tab.id]
                                 let contextTargetIds = tabManager.tabs.compactMap { workspace in
@@ -9757,6 +9822,7 @@ private struct SidebarFooterButtons: View {
             UpdatePill(model: updateViewModel)
             Spacer(minLength: 0)
             SidebarWebAppButtons()
+            SidebarPersistentWorkspaceButtons()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -9765,10 +9831,13 @@ private struct SidebarFooterButtons: View {
 /// Sidebar footer icons for enabled web app shortcuts.
 private struct SidebarWebAppButtons: View {
     @ObservedObject private var webAppManager = WebAppManager.shared
+    @ObservedObject private var persistentManager = PersistentWorkspaceManager.shared
     @EnvironmentObject var tabManager: TabManager
 
     var body: some View {
-        ForEach(webAppManager.enabledApps) { app in
+        // Hide legacy web app buttons when a persistent workspace covers the same app ID.
+        let persistentIds = Set(persistentManager.definitions.map(\.id))
+        ForEach(webAppManager.enabledApps.filter { !persistentIds.contains($0.id) }) { app in
             SidebarWebAppButton(app: app, tabManager: tabManager)
         }
     }
@@ -9834,6 +9903,80 @@ private struct SidebarWebAppButton: View {
             )
         }
         return "\(base) (prefix+S)"
+    }
+}
+
+/// Sidebar footer icons for persistent workspaces defined in workspaces.yaml.
+private struct SidebarPersistentWorkspaceButtons: View {
+    @ObservedObject private var manager = PersistentWorkspaceManager.shared
+    @EnvironmentObject var tabManager: TabManager
+
+    var body: some View {
+        ForEach(manager.sidebarDefinitions) { def in
+            SidebarPersistentWorkspaceButton(definition: def, tabManager: tabManager)
+        }
+    }
+}
+
+/// Individual persistent workspace icon button with unread badge.
+private struct SidebarPersistentWorkspaceButton: View {
+    let definition: PersistentWorkspaceDefinition
+    let tabManager: TabManager
+    @ObservedObject private var manager = PersistentWorkspaceManager.shared
+    @State private var isHovered = false
+
+    private var unreadCount: Int {
+        manager.unreadCounts[definition.id] ?? 0
+    }
+
+    private var isActive: Bool {
+        guard let workspaceId = manager.workspaceIds[definition.id] else { return false }
+        return tabManager.selectedTabId == workspaceId
+    }
+
+    var body: some View {
+        Button(action: {
+            manager.toggle(definition.id, tabManager: tabManager)
+        }) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: definition.icon ?? "square.grid.2x2")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isActive ? .white : .secondary)
+                    .frame(width: 24, height: 24)
+
+                if unreadCount != 0 {
+                    ZStack {
+                        Circle()
+                            .fill(Color.red)
+                        if unreadCount > 0 {
+                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: unreadCount > 0 ? 14 : 8, height: unreadCount > 0 ? 14 : 8)
+                    .offset(x: 3, y: -3)
+                }
+            }
+        }
+        .buttonStyle(SidebarFooterIconButtonStyle())
+        .safeHelp(tooltip)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    private var tooltip: String {
+        var parts = [definition.name]
+        if unreadCount > 0 {
+            parts.append("(\(unreadCount) unread)")
+        } else if unreadCount == -1 {
+            parts.append("(unread)")
+        }
+        if let shortcut = definition.shortcut {
+            parts.append("(prefix+\(shortcut))")
+        }
+        return parts.joined(separator: " ")
     }
 }
 
@@ -11540,7 +11683,7 @@ private struct TabItemView: View, Equatable {
                 }
 
                 Text(tab.title)
-                    .font(Font(SidebarFontHelper.sidebarTitleFont(size: 12.5, weight: .semibold)))
+                    .font(NerdFontHelper.swiftUIFont(size: 12.5, weight: .semibold))
                     .foregroundColor(activePrimaryTextColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -12007,7 +12150,7 @@ private struct TabItemView: View, Equatable {
         Button(String(localized: "contextMenu.moveDown", defaultValue: "Move Down")) {
             moveBy(1)
         }
-        .disabled(index >= tabManager.tabs.count - 1)
+        .disabled(index >= accessibilityWorkspaceCount - 1)
 
         Button(String(localized: "contextMenu.moveToTop", defaultValue: "Move to Top")) {
             tabManager.moveTabsToTop(Set(targetIds))
@@ -12062,7 +12205,7 @@ private struct TabItemView: View, Equatable {
         Button(String(localized: "contextMenu.closeWorkspacesBelow", defaultValue: "Close Workspaces Below")) {
             closeTabsBelow(tabId: tab.id)
         }
-        .disabled(index >= tabManager.tabs.count - 1)
+        .disabled(index >= accessibilityWorkspaceCount - 1)
 
         Button(String(localized: "contextMenu.closeWorkspacesAbove", defaultValue: "Close Workspaces Above")) {
             closeTabsAbove(tabId: tab.id)
@@ -12155,7 +12298,9 @@ private struct TabItemView: View, Equatable {
     }
 
     private func moveBy(_ delta: Int) {
-        let targetIndex = index + delta
+        // Resolve the real index in tabManager.tabs (not the filtered visual index)
+        guard let realIndex = tabManager.tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        let targetIndex = realIndex + delta
         guard targetIndex >= 0, targetIndex < tabManager.tabs.count else { return }
         guard tabManager.reorderWorkspace(tabId: tab.id, toIndex: targetIndex) else { return }
         selectedTabIds = [tab.id]
