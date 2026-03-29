@@ -9158,7 +9158,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let chars = event.charactersIgnoringModifiers
 
             if hasCmd && !hasCtrl && !hasOpt && chars == "t" {
-                TerminalController.shared.popupAddTerminalTab()
+                let hasShift = flags.contains(.shift)
+                if hasShift {
+                    TerminalController.shared.popupPromptBrowserTab()
+                } else {
+                    TerminalController.shared.popupAddTerminalTab()
+                }
                 return true
             }
             if hasCmd && !hasCtrl && !hasOpt && chars == "w" {
