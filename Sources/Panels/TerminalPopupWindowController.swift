@@ -576,10 +576,10 @@ final class PopupTabBarView: NSView {
         }
         tabButtons.removeAll()
 
-        // Hide tab bar when only one tab
-        isHidden = tabs.count <= 1
+        // Always show the tab bar so the user knows tabs exist
+        isHidden = false
 
-        guard tabs.count > 1 else { return }
+        guard !tabs.isEmpty else { return }
 
         var previousTrailing: NSLayoutXAxisAnchor = leadingAnchor
 
@@ -657,29 +657,34 @@ private class TerminalPopupPanel: NSPanel {
         // Swallow ESC -- popup is dismissed only via prefix+i
     }
 
-    override func keyDown(with event: NSEvent) {
-        // Ctrl+Tab / Ctrl+Shift+Tab to cycle popup tabs
-        if event.modifierFlags.contains(.control) && event.keyCode == 48 /* Tab */ {
-            if event.modifierFlags.contains(.shift) {
-                popupController?.selectPreviousTab()
-            } else {
-                popupController?.selectNextTab()
+    override func sendEvent(_ event: NSEvent) {
+        // Intercept key equivalents before they reach the terminal view
+        if event.type == .keyDown {
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            // Ctrl+Tab / Ctrl+Shift+Tab to cycle popup tabs
+            if flags.contains(.control) && event.keyCode == 48 /* Tab */ {
+                if flags.contains(.shift) {
+                    popupController?.selectPreviousTab()
+                } else {
+                    popupController?.selectNextTab()
+                }
+                return
             }
-            return
+
+            // Cmd+W to close current tab
+            if flags == .command && event.charactersIgnoringModifiers == "w" {
+                popupController?.closeSelectedTab()
+                return
+            }
+
+            // Cmd+T to add a new terminal tab
+            if flags == .command && event.charactersIgnoringModifiers == "t" {
+                popupController?.addTerminalTab()
+                return
+            }
         }
 
-        // Cmd+W to close current tab
-        if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "w" {
-            popupController?.closeSelectedTab()
-            return
-        }
-
-        // Cmd+T to add a new terminal tab
-        if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "t" {
-            popupController?.addTerminalTab()
-            return
-        }
-
-        super.keyDown(with: event)
+        super.sendEvent(event)
     }
 }
