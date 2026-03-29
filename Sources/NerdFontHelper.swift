@@ -1,29 +1,60 @@
 import AppKit
+import SwiftUI
 
 /// Builds a system font with a Nerd Font as cascade fallback,
 /// so Private Use Area characters (workmux icons, etc.) render
-/// in the sidebar instead of showing as boxes.
-enum SidebarFontHelper {
+/// correctly instead of showing as boxes.
+///
+/// Used anywhere workspace/surface names may contain nerdfont glyphs:
+/// sidebar, command palette, titlebar, rename flow, etc.
+enum NerdFontHelper {
 
-    /// Cache the resolved font to avoid re-creating descriptors on every cell draw.
-    private static var cachedFont: NSFont?
-    private static var cachedSize: CGFloat = 0
-    private static var cachedWeight: NSFont.Weight = .semibold
+    /// Cache resolved fonts keyed by (size, weight) to avoid
+    /// re-creating descriptors on every draw.
+    private struct CacheKey: Hashable {
+        let size: CGFloat
+        let weight: NSFont.Weight
 
-    static func sidebarTitleFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
-        // Return cached font if parameters haven't changed
-        if let cached = cachedFont,
-           cachedSize == size,
-           cachedWeight == weight {
-            return cached
+        // NSFont.Weight isn't Hashable by default -- hash on rawValue.
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(size)
+            hasher.combine(weight.rawValue)
         }
 
+        static func == (lhs: CacheKey, rhs: CacheKey) -> Bool {
+            lhs.size == rhs.size && lhs.weight.rawValue == rhs.weight.rawValue
+        }
+    }
+
+    private static var cache: [CacheKey: NSFont] = [:]
+
+    // MARK: - Public API
+
+    /// Returns an NSFont (AppKit) with nerdfont cascade fallback.
+    static func font(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        let key = CacheKey(size: size, weight: weight)
+        if let cached = cache[key] {
+            return cached
+        }
         let font = buildFont(size: size, weight: weight)
-        cachedFont = font
-        cachedSize = size
-        cachedWeight = weight
+        cache[key] = font
         return font
     }
+
+    /// Returns a SwiftUI Font with nerdfont cascade fallback.
+    static func swiftUIFont(size: CGFloat, weight: NSFont.Weight) -> Font {
+        Font(font(size: size, weight: weight))
+    }
+
+    // MARK: - Backwards compatibility
+
+    /// Legacy name kept so existing sidebar call sites don't need renaming
+    /// in the same commit. Remove once all callers migrate.
+    static func sidebarTitleFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        font(size: size, weight: weight)
+    }
+
+    // MARK: - Internals
 
     private static func buildFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
         let systemFont = NSFont.systemFont(ofSize: size, weight: weight)

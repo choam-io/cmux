@@ -2623,7 +2623,7 @@ struct ContentView: View {
                 }
 
                 Text(titlebarText)
-                    .font(Font(SidebarFontHelper.sidebarTitleFont(size: 13, weight: .bold)))
+                    .font(NerdFontHelper.swiftUIFont(size: 13, weight: .bold))
                     .foregroundColor(fakeTitlebarTextColor)
                     .lineLimit(1)
                     .allowsHitTesting(false)
@@ -3822,7 +3822,7 @@ struct ContentView: View {
                                         result.command.title,
                                         matchedIndices: result.titleMatchIndices
                                     )
-                                        .font(.system(size: 13, weight: .regular))
+                                        .font(NerdFontHelper.swiftUIFont(size: 13, weight: .regular))
                                         .lineLimit(1)
                                     Spacer()
 
@@ -3951,7 +3951,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             TextField(target.placeholder, text: $commandPaletteRenameDraft)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .regular))
+                .font(NerdFontHelper.swiftUIFont(size: 13, weight: .regular))
                 .tint(Color(nsColor: sidebarActiveForegroundNSColor(opacity: 1.0)))
                 .focused($isCommandPaletteRenameFocused)
                 .accessibilityIdentifier("CommandPaletteRenameField")
@@ -4002,7 +4002,7 @@ struct ContentView: View {
 
         return VStack(spacing: 0) {
             Text(nextName)
-                .font(.system(size: 13, weight: .regular))
+                .font(NerdFontHelper.swiftUIFont(size: 13, weight: .regular))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 9)
@@ -4201,7 +4201,7 @@ struct ContentView: View {
 
         func makeNSView(context: Context) -> CommandPaletteNativeTextField {
             let field = CommandPaletteNativeTextField(frame: .zero)
-            field.font = .systemFont(ofSize: 13)
+            field.font = NerdFontHelper.font(size: 13, weight: .regular)
             field.placeholderString = placeholder
             field.setAccessibilityIdentifier("CommandPaletteSearchField")
             field.delegate = context.coordinator
@@ -11540,7 +11540,7 @@ private struct TabItemView: View, Equatable {
                 }
 
                 Text(tab.title)
-                    .font(Font(SidebarFontHelper.sidebarTitleFont(size: 12.5, weight: .semibold)))
+                    .font(NerdFontHelper.swiftUIFont(size: 12.5, weight: .semibold))
                     .foregroundColor(activePrimaryTextColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
