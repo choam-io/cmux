@@ -61,11 +61,15 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             }
         }
 
-        init(title: String, iconSystemName: String, content: PopupTabContent) {
+        init(title: String, iconSystemName: String, content: PopupTabContent, pinned: Bool = false) {
             self.title = title
             self.iconSystemName = iconSystemName
             self.content = content
+            self.pinned = pinned
         }
+
+        /// Pinned tabs can't be closed with Cmd+W.
+        var pinned: Bool
     }
 
     // MARK: - State
@@ -127,11 +131,12 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             initializePanel()
         }
 
-        // Ensure at least one tab exists (default terminal)
+        // Ensure at least one tab exists (default terminal, pinned)
         if tabs.isEmpty {
             addTerminalTab(
                 command: config.initialCommand,
                 cwd: config.workingDirectory,
+                pinned: true,
                 select: true
             )
         }
@@ -186,6 +191,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         command: String? = nil,
         cwd: String? = nil,
         title: String? = nil,
+        pinned: Bool = false,
         select: Bool = true
     ) -> PopupTab {
         let surface = TerminalSurface(
@@ -202,7 +208,8 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         let tab = PopupTab(
             title: tabTitle,
             iconSystemName: "terminal",
-            content: .terminal(surface: surface)
+            content: .terminal(surface: surface),
+            pinned: pinned
         )
 
         // Watch for shell exit
@@ -260,6 +267,9 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     func closeTab(at index: Int) {
         guard index >= 0, index < tabs.count else { return }
         let tab = tabs[index]
+
+        // Pinned tabs can't be closed
+        guard !tab.pinned else { return }
 
         // Clean up observers
         if let obs = childExitObservations.removeValue(forKey: tab.id) {
@@ -606,7 +616,15 @@ final class PopupTabBarView: NSView {
 
             button.image = tinted
             button.imagePosition = .imageLeading
-            button.attributedTitle = NSAttributedString(string: " \(tab.title)", attributes: attrs)
+            // Show index number + title: "0 dashboard", "1 Terminal"
+            let indexLabel = "\(index) "
+            let indexAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
+                .foregroundColor: isSelected ? NSColor.white.withAlphaComponent(0.6) : NSColor.tertiaryLabelColor
+            ]
+            let labelStr = NSMutableAttributedString(string: indexLabel, attributes: indexAttrs)
+            labelStr.append(NSAttributedString(string: tab.title, attributes: attrs))
+            button.attributedTitle = labelStr
             button.contentTintColor = isSelected ? .white : .secondaryLabelColor
 
             button.wantsLayer = true
@@ -619,7 +637,7 @@ final class PopupTabBarView: NSView {
             tabButtons.append(button)
 
             NSLayoutConstraint.activate([
-                button.leadingAnchor.constraint(equalTo: previousTrailing, constant: index == 0 ? 8 : 2),
+                button.leadingAnchor.constraint(equalTo: previousTrailing, constant: index == 0 ? 8 : 6),
                 button.centerYAnchor.constraint(equalTo: centerYAnchor),
                 button.heightAnchor.constraint(equalToConstant: 24),
             ])

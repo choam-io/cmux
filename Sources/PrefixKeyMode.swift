@@ -168,10 +168,16 @@ final class PrefixKeyMode {
             return false
         }
         
-        // Handle number keys for workspace selection (1-9)
-        if let digit = Int(key), (1...9).contains(digit) {
-            postWorkspaceSelection(digit)
-            return true
+        // Handle number keys: popup tab selection (0-9) when popup visible,
+        // otherwise workspace selection (1-9)
+        if let digit = Int(key), digit >= 0 && digit <= 9 {
+            if TerminalController.shared.isPopupVisible {
+                postPopupTabSelection(digit)
+                return true
+            } else if digit >= 1 {
+                postWorkspaceSelection(digit)
+                return true
+            }
         }
         
         // Check persistent workspace shortcuts (from workspaces.yaml)
@@ -245,6 +251,17 @@ final class PrefixKeyMode {
         )
         #if DEBUG
         dlog("prefix.togglePersistentWorkspace: \(shortcutKey)")
+        #endif
+    }
+
+    private func postPopupTabSelection(_ index: Int) {
+        NotificationCenter.default.post(
+            name: Self.performActionNotification,
+            object: nil,
+            userInfo: ["selectPopupTab": index]
+        )
+        #if DEBUG
+        dlog("prefix.selectPopupTab: \(index)")
         #endif
     }
     

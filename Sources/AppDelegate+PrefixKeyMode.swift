@@ -41,6 +41,11 @@ extension AppDelegate {
            let tabManager {
             PersistentWorkspaceManager.shared.toggleByShortcut(shortcutKey, tabManager: tabManager)
         }
+
+        // Handle popup tab selection by number
+        if let popupTabIndex = userInfo["selectPopupTab"] as? Int {
+            TerminalController.shared.popupSelectTab(at: popupTabIndex)
+        }
     }
     
     private func performPrefixAction(_ action: KeyboardShortcutSettings.Action) {
