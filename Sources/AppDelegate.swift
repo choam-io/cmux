@@ -9157,7 +9157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let hasOpt = flags.contains(.option)
             let chars = event.charactersIgnoringModifiers
 
-            if hasCmd && !hasCtrl && !hasOpt && chars == "t" {
+            if hasCmd && !hasCtrl && !hasOpt && chars?.lowercased() == "t" {
                 let hasShift = flags.contains(.shift)
                 if hasShift {
                     TerminalController.shared.popupPromptBrowserTab()
