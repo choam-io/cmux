@@ -2305,6 +2305,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Install prefix key mode observer for tmux-style shortcuts
         installPrefixKeyModeObserver()
 
+        // Initialize the global dropdown terminal so Cmd+' hotkey is registered
+        TerminalController.shared.initializeDropdown()
+
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handleThemesReloadNotification(_:)),

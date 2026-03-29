@@ -6671,6 +6671,16 @@ class TerminalController {
 
     // MARK: - Popup Terminal
 
+    /// Initialize the dropdown eagerly so the global Cmd+' hotkey is registered at startup.
+    func initializeDropdown() {
+        _ = getOrCreatePopupController(
+            cwd: nil,
+            command: "/bin/zsh -lic '$HOME/.cargo/bin/workmux dashboard'",
+            widthPct: nil,
+            heightPct: nil
+        )
+    }
+
     /// Called from prefix key mode or other direct invocations (not via socket).
     func togglePopup(parentWindow: NSWindow?, command: String? = nil) {
         let controller = getOrCreatePopupController(

@@ -23,12 +23,12 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
     struct Config {
         /// Height as percentage of screen height (0.0 - 1.0)
-        var heightPercent: CGFloat = 0.45
+        var heightPercent: CGFloat = 1.0
         var minHeight: CGFloat = 300
         var workingDirectory: String? = nil
         var initialCommand: String? = nil
         /// Background transparency (0.0 = fully transparent, 1.0 = opaque)
-        var backgroundOpacity: CGFloat = 0.92
+        var backgroundOpacity: CGFloat = 1.0
     }
 
     // MARK: - Popup Tab
@@ -119,10 +119,16 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     // MARK: - Global Hotkey (Cmd+')
 
     private func installGlobalHotkey() {
+        // Request accessibility if needed (global monitor requires it)
+        if !AXIsProcessTrusted() {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+        }
+
         // Global monitor: fires when nsmux is NOT the active app
         globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if Self.isDropdownHotkey(event) {
-                Task { @MainActor in
+                DispatchQueue.main.async {
                     self?.toggle()
                 }
             }
@@ -131,7 +137,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         // Local monitor: fires when nsmux IS the active app
         localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if Self.isDropdownHotkey(event) {
-                Task { @MainActor in
+                DispatchQueue.main.async {
                     self?.toggle()
                 }
                 return nil // consume
@@ -371,7 +377,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         let frame = computeDropdownFrame()
         let newPanel = TerminalPopupPanel(
             contentRect: frame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -379,7 +385,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         newPanel.isOpaque = false
         newPanel.hasShadow = true
         newPanel.backgroundColor = .clear
-        newPanel.level = .floating
+        newPanel.level = .init(NSWindow.Level.mainMenu.rawValue + 1)
         newPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         newPanel.hidesOnDeactivate = false
         newPanel.delegate = self
@@ -398,7 +404,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
                                           .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         container.layer?.masksToBounds = true
         container.layer?.borderWidth = 0
-        container.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(config.backgroundOpacity).cgColor
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         self.containerView = container
 
         // Tab bar at top
@@ -603,15 +609,13 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             ?? NSScreen.main
             ?? NSScreen.screens.first!
 
-        let visibleFrame = screen.visibleFrame
         let screenFrame = screen.frame
 
+        // Fullscreen: cover the entire screen including menu bar area
         let height = max(config.minHeight, screenFrame.height * config.heightPercent)
         let width = screenFrame.width
-
-        // Top of screen (visibleFrame.maxY is the top below the menu bar)
         let x = screenFrame.minX
-        let y = visibleFrame.maxY - height
+        let y = screenFrame.maxY - height
 
         return NSRect(x: x, y: y, width: width, height: height)
     }
@@ -740,7 +744,7 @@ private class PopupContainerView: NSView {
 
     override func updateLayer() {
         super.updateLayer()
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
     }
 }
 
