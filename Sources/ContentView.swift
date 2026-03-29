@@ -1872,9 +1872,35 @@ struct ContentView: View {
         let subtitle: String
         let shortcutHint: String?
         let kindLabel: String?
+        /// SF Symbol name shown before the title (e.g. persistent workspace icon).
+        let iconSystemName: String?
         let keywords: [String]
         let dismissOnRun: Bool
         let action: () -> Void
+
+        init(
+            id: String,
+            rank: Int,
+            title: String,
+            subtitle: String,
+            shortcutHint: String? = nil,
+            kindLabel: String? = nil,
+            iconSystemName: String? = nil,
+            keywords: [String],
+            dismissOnRun: Bool,
+            action: @escaping () -> Void
+        ) {
+            self.id = id
+            self.rank = rank
+            self.title = title
+            self.subtitle = subtitle
+            self.shortcutHint = shortcutHint
+            self.kindLabel = kindLabel
+            self.iconSystemName = iconSystemName
+            self.keywords = keywords
+            self.dismissOnRun = dismissOnRun
+            self.action = action
+        }
 
         var searchableTexts: [String] {
             [title, subtitle] + keywords
@@ -3817,7 +3843,13 @@ struct ContentView: View {
                             Button {
                                 runCommandPaletteResult(commandID: result.id)
                             } label: {
-                                HStack(spacing: 8) {
+                                HStack(spacing: 6) {
+                                    if let iconName = result.command.iconSystemName {
+                                        Image(systemName: iconName)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 16)
+                                    }
                                     commandPaletteHighlightedTitleText(
                                         result.command.title,
                                         matchedIndices: result.titleMatchIndices
@@ -3825,6 +3857,14 @@ struct ContentView: View {
                                         .font(NerdFontHelper.swiftUIFont(size: 13, weight: .regular))
                                         .lineLimit(1)
                                     Spacer()
+
+                                    if let kindLabel = result.command.kindLabel, result.command.shortcutHint != nil {
+                                        // Show kind label before shortcut pill when both are present
+                                        Text(kindLabel)
+                                            .font(.system(size: 11, weight: .regular))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
 
                                     if let trailingLabel = commandPaletteTrailingLabel(for: result.command) {
                                         switch trailingLabel.style {
@@ -4938,6 +4978,30 @@ struct ContentView: View {
             for workspace in workspaces {
                 let workspaceName = workspaceDisplayName(workspace)
                 let workspaceCommandId = "switcher.workspace.\(workspace.id.uuidString.lowercased())"
+                let workspaceId = workspace.id
+
+                // Check if this workspace is a persistent workspace from config
+                let persistentDef = PersistentWorkspaceManager.shared.definition(forWorkspace: workspaceId)
+                // Also check legacy web app workspaces
+                let webAppDef = WebAppManager.shared.appForWorkspace(workspaceId)
+
+                let workspaceIcon: String?
+                let workspaceShortcutHint: String?
+                let workspaceKindLabel: String
+                if let persistentDef {
+                    workspaceIcon = persistentDef.icon
+                    workspaceShortcutHint = persistentDef.shortcut.map { "prefix+\($0)" }
+                    workspaceKindLabel = String(localized: "commandPalette.kind.persistentWorkspace", defaultValue: "Pinned")
+                } else if let webAppDef {
+                    workspaceIcon = webAppDef.iconSystemName
+                    workspaceShortcutHint = "prefix+S"
+                    workspaceKindLabel = String(localized: "commandPalette.kind.persistentWorkspace", defaultValue: "Pinned")
+                } else {
+                    workspaceIcon = nil
+                    workspaceShortcutHint = nil
+                    workspaceKindLabel = String(localized: "commandPalette.kind.workspace", defaultValue: "Workspace")
+                }
+
                 let workspaceKeywords = CommandPaletteSwitcherSearchIndexer.keywords(
                     baseKeywords: [
                         "workspace",
@@ -4945,19 +5009,20 @@ struct ContentView: View {
                         "go",
                         "open",
                         workspaceName
-                    ] + windowKeywords,
+                    ] + windowKeywords + (persistentDef != nil || webAppDef != nil ? ["pinned", "persistent"] : []),
                     metadata: commandPaletteWorkspaceSearchMetadata(for: workspace),
                     detail: .workspace
                 )
-                let workspaceId = workspace.id
+
                 entries.append(
                     CommandPaletteCommand(
                         id: workspaceCommandId,
                         rank: nextRank,
                         title: workspaceName,
                         subtitle: commandPaletteSwitcherSubtitle(base: String(localized: "commandPalette.switcher.workspaceLabel", defaultValue: "Workspace"), windowLabel: context.windowLabel),
-                        shortcutHint: nil,
-                        kindLabel: String(localized: "commandPalette.kind.workspace", defaultValue: "Workspace"),
+                        shortcutHint: workspaceShortcutHint,
+                        kindLabel: workspaceKindLabel,
+                        iconSystemName: workspaceIcon,
                         keywords: workspaceKeywords,
                         dismissOnRun: true,
                         action: {
