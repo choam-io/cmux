@@ -30,8 +30,6 @@ struct PersistentWorkspaceDefinition: Codable, Sendable, Identifiable {
 
     /// Create this workspace automatically on app launch.
     var auto_launch: Bool?
-    /// Pin the workspace so it can't be accidentally closed.
-    var pinned: Bool?
 
     // -- Keyboard shortcut --
 

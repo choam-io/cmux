@@ -226,9 +226,9 @@ final class PersistentWorkspaceManager: ObservableObject {
         }
 
         // Pin if configured
-        if definition.pinned == true {
-            tabManager.setPinned(workspace, pinned: true)
-        }
+        // Persistent workspaces are always pinned -- they live in the sidebar
+        // footer and shouldn't be accidentally closeable.
+        tabManager.setPinned(workspace, pinned: true)
 
         #if DEBUG
         dlog("persistent.create.ok id=\(definition.id) workspace=\(workspaceId.uuidString.prefix(5))")
