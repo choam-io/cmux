@@ -9831,10 +9831,13 @@ private struct SidebarFooterButtons: View {
 /// Sidebar footer icons for enabled web app shortcuts.
 private struct SidebarWebAppButtons: View {
     @ObservedObject private var webAppManager = WebAppManager.shared
+    @ObservedObject private var persistentManager = PersistentWorkspaceManager.shared
     @EnvironmentObject var tabManager: TabManager
 
     var body: some View {
-        ForEach(webAppManager.enabledApps) { app in
+        // Hide legacy web app buttons when a persistent workspace covers the same app ID.
+        let persistentIds = Set(persistentManager.definitions.map(\.id))
+        ForEach(webAppManager.enabledApps.filter { !persistentIds.contains($0.id) }) { app in
             SidebarWebAppButton(app: app, tabManager: tabManager)
         }
     }
