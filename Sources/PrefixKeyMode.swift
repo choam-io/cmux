@@ -113,9 +113,6 @@ final class PrefixKeyMode {
         // Popup terminal
         "i": .togglePopup,     // prefix+i = toggle popup terminal
         
-        // Web apps
-        "S": .toggleWebApp,    // prefix+S (shift+s) = toggle web app (Slack, etc.)
-        
         // Misc
         "t": .newSurface,      // prefix+t = new tab/surface
         "?": .triggerFlash,    // prefix+? = flash to find cursor
