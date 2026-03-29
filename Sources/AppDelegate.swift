@@ -9141,14 +9141,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func handleCustomShortcut(event: NSEvent) -> Bool {
-        // If the popup overlay is focused, let it handle its own shortcuts.
-        // Don't intercept Cmd+T/Cmd+W etc. that the popup needs.
+        // Prefix key mode: tmux-style prefix+key shortcuts
+        // Must run even when popup is focused (prefix+i toggles popup)
+        if handlePrefixKeyMode(event: event) {
+            return true
+        }
+
+        // If the popup overlay is focused, let it handle Cmd+T/W/Ctrl+Tab.
+        // Don't intercept shortcuts the popup needs for tab management.
         if let keyWindow = NSApp.keyWindow,
            keyWindow.identifier?.rawValue == "cmux.terminal-popup" {
             return false
         }
 
-        // Prefix key mode: tmux-style prefix+key shortcuts
+        // Direct key bindings: Ctrl+h/j/k/l pane navigation (no prefix required)
         if handlePrefixKeyMode(event: event) {
             return true
         }
