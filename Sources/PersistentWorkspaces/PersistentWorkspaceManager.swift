@@ -1,4 +1,5 @@
 import AppKit
+import Bonsplit
 import Combine
 import Foundation
 import WebKit
@@ -190,7 +191,7 @@ final class PersistentWorkspaceManager: ObservableObject {
         } else {
             // No layout -- this is a single-surface workspace.
             // Check if it should be a browser.
-            if let firstBrowserUrl = findFirstBrowserUrl(definition: definition) {
+            if let firstBrowserUrl = findFirstBrowserUrl(definition) {
                 // Replace default terminal with a browser
                 guard let paneId = workspace.bonsplitController.focusedPaneId
                         ?? workspace.bonsplitController.allPaneIds.first else { return }
@@ -393,7 +394,10 @@ final class PersistentWorkspaceScriptMessageHandler: NSObject, WKScriptMessageHa
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard let body = message.body as? [String: Any],
+        // Extract body synchronously before entering the MainActor task
+        // to avoid main-actor isolation warnings on WKScriptMessage.body.
+        let messageBody = message.body
+        guard let body = messageBody as? [String: Any],
               let type = body["type"] as? String else { return }
 
         Task { @MainActor [weak self] in

@@ -98,6 +98,7 @@ final class PersistentWorkspaceConfigStore: ObservableObject {
               !data.isEmpty else {
             if !definitions.isEmpty {
                 definitions = []
+                Self.activeShortcutKeys = []
                 configRevision &+= 1
             }
             return
@@ -107,6 +108,7 @@ final class PersistentWorkspaceConfigStore: ObservableObject {
             let decoder = YAMLDecoder()
             let config = try decoder.decode(PersistentWorkspaceConfigFile.self, from: data)
             definitions = config.workspaces
+            Self.activeShortcutKeys = Set(config.workspaces.compactMap(\.shortcut).filter { !$0.isEmpty })
             configRevision &+= 1
         } catch {
             NSLog("[PersistentWorkspaceConfig] parse error at %@: %@", configPath, String(describing: error))
@@ -130,6 +132,10 @@ final class PersistentWorkspaceConfigStore: ObservableObject {
             return (key: shortcut, definition: def)
         }
     }
+
+    /// Thread-safe set of configured shortcut keys for PrefixKeyMode to check
+    /// without crossing actor boundaries. Updated on every config load.
+    nonisolated(unsafe) private(set) static var activeShortcutKeys: Set<String> = []
 
     // MARK: - File Watching
 

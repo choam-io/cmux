@@ -178,7 +178,7 @@ final class PrefixKeyMode {
         }
         
         // Check persistent workspace shortcuts (from workspaces.yaml)
-        if PersistentWorkspaceConfigStore.shared.shortcutDefinitions.contains(where: { $0.key == key }) {
+        if PersistentWorkspaceConfigStore.activeShortcutKeys.contains(key) {
             postPersistentWorkspaceToggle(key)
             return true
         }
