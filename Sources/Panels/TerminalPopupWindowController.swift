@@ -440,17 +440,78 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
     private func handleTabShellExit(tabId: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == tabId }) else { return }
-        // If it's the only tab, hide the popup
+        let tab = tabs[index]
+
+        // Clean up the old exit observer
+        if let obs = childExitObservations.removeValue(forKey: tabId) {
+            NotificationCenter.default.removeObserver(obs)
+        }
+
+        // Pinned tabs restart automatically
+        if tab.pinned {
+            restartPinnedTab(at: index)
+            return
+        }
+
+        // Unpinned: close or hide
         if tabs.count == 1 {
             hide()
-            // Reset so next show() creates a fresh tab
             tabs.removeAll()
-            if let obs = childExitObservations.removeValue(forKey: tabId) {
-                NotificationCenter.default.removeObserver(obs)
-            }
         } else {
             closeTab(at: index)
         }
+    }
+
+    private func restartPinnedTab(at index: Int) {
+        guard index >= 0, index < tabs.count else { return }
+        let oldTab = tabs[index]
+        guard case .terminal = oldTab.content else { return }
+
+        // Remove old content view
+        oldTab.contentView.removeFromSuperview()
+
+        // Create fresh surface with the same command
+        let surface = TerminalSurface(
+            tabId: UUID(),
+            context: GHOSTTY_SURFACE_CONTEXT_TAB,
+            configTemplate: nil,
+            workingDirectory: config.workingDirectory,
+            initialCommand: config.initialCommand,
+            initialEnvironmentOverrides: [:],
+            additionalEnvironment: ["CMUX_POPUP": "1"]
+        )
+
+        let newTab = PopupTab(
+            title: oldTab.title,
+            iconSystemName: oldTab.iconSystemName,
+            content: .terminal(surface: surface),
+            pinned: true
+        )
+
+        // Watch for exit on the new surface
+        let surfaceId = surface.id
+        let newTabId = newTab.id
+        let obs = NotificationCenter.default.addObserver(
+            forName: .cmuxChildExited,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let exitedId = notification.userInfo?["surfaceId"] as? UUID,
+                  exitedId == surfaceId else { return }
+            self.handleTabShellExit(tabId: newTabId)
+        }
+        childExitObservations[newTabId] = obs
+
+        // Swap in place
+        tabs[index] = newTab
+
+        // If this tab is selected, show it
+        if selectedTabIndex == index {
+            showTab(at: index)
+        }
+
+        tabBarView?.refresh(tabs: tabs, selectedIndex: selectedTabIndex)
     }
 
     // MARK: - Teardown
