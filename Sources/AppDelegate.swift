@@ -2984,6 +2984,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             ) {
                 primaryWindow.setFrame(restoredFrame, display: true)
             }
+            // No session to restore -- auto-launch persistent workspaces now.
+            PersistentWorkspaceManager.shared.autoLaunch(tabManager: primaryContext.tabManager)
         }
 
         if let startupSnapshot {
@@ -3020,6 +3022,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Don't save immediately after restore -- the restored state may be degraded
         // if some panels failed to create. The autosave timer (every 8s) will capture
         // the state once everything has settled.
+
+        // Auto-launch persistent workspaces that aren't already restored from session.
+        if let tabManager {
+            PersistentWorkspaceManager.shared.autoLaunch(tabManager: tabManager)
+        }
     }
 
     private func applySessionWindowSnapshot(

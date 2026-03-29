@@ -177,6 +177,12 @@ final class PrefixKeyMode {
             return true
         }
         
+        // Check persistent workspace shortcuts (from workspaces.yaml)
+        if PersistentWorkspaceConfigStore.shared.shortcutDefinitions.contains(where: { $0.key == key }) {
+            postPersistentWorkspaceToggle(key)
+            return true
+        }
+
         // Look up the action
         if let action = Self.defaultBindings[key] ?? Self.defaultBindings[key.lowercased()] {
             postAction(action)
@@ -231,6 +237,17 @@ final class PrefixKeyMode {
         )
         #if DEBUG
         dlog("prefix.selectWorkspace: \(number)")
+        #endif
+    }
+
+    private func postPersistentWorkspaceToggle(_ shortcutKey: String) {
+        NotificationCenter.default.post(
+            name: Self.performActionNotification,
+            object: nil,
+            userInfo: ["togglePersistentWorkspace": shortcutKey]
+        )
+        #if DEBUG
+        dlog("prefix.togglePersistentWorkspace: \(shortcutKey)")
         #endif
     }
     

@@ -35,6 +35,12 @@ extension AppDelegate {
         if let number = userInfo["selectWorkspace"] as? Int {
             tabManager?.selectTab(at: number - 1) // 0-indexed
         }
+
+        // Handle persistent workspace toggle by shortcut key
+        if let shortcutKey = userInfo["togglePersistentWorkspace"] as? String,
+           let tabManager {
+            PersistentWorkspaceManager.shared.toggleByShortcut(shortcutKey, tabManager: tabManager)
+        }
     }
     
     private func performPrefixAction(_ action: KeyboardShortcutSettings.Action) {

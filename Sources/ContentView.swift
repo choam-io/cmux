@@ -9757,6 +9757,7 @@ private struct SidebarFooterButtons: View {
             UpdatePill(model: updateViewModel)
             Spacer(minLength: 0)
             SidebarWebAppButtons()
+            SidebarPersistentWorkspaceButtons()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -9834,6 +9835,80 @@ private struct SidebarWebAppButton: View {
             )
         }
         return "\(base) (prefix+S)"
+    }
+}
+
+/// Sidebar footer icons for persistent workspaces defined in workspaces.yaml.
+private struct SidebarPersistentWorkspaceButtons: View {
+    @ObservedObject private var manager = PersistentWorkspaceManager.shared
+    @EnvironmentObject var tabManager: TabManager
+
+    var body: some View {
+        ForEach(manager.sidebarDefinitions) { def in
+            SidebarPersistentWorkspaceButton(definition: def, tabManager: tabManager)
+        }
+    }
+}
+
+/// Individual persistent workspace icon button with unread badge.
+private struct SidebarPersistentWorkspaceButton: View {
+    let definition: PersistentWorkspaceDefinition
+    let tabManager: TabManager
+    @ObservedObject private var manager = PersistentWorkspaceManager.shared
+    @State private var isHovered = false
+
+    private var unreadCount: Int {
+        manager.unreadCounts[definition.id] ?? 0
+    }
+
+    private var isActive: Bool {
+        guard let workspaceId = manager.workspaceIds[definition.id] else { return false }
+        return tabManager.selectedTabId == workspaceId
+    }
+
+    var body: some View {
+        Button(action: {
+            manager.toggle(definition.id, tabManager: tabManager)
+        }) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: definition.icon ?? "square.grid.2x2")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isActive ? .white : .secondary)
+                    .frame(width: 24, height: 24)
+
+                if unreadCount != 0 {
+                    ZStack {
+                        Circle()
+                            .fill(Color.red)
+                        if unreadCount > 0 {
+                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: unreadCount > 0 ? 14 : 8, height: unreadCount > 0 ? 14 : 8)
+                    .offset(x: 3, y: -3)
+                }
+            }
+        }
+        .buttonStyle(SidebarFooterIconButtonStyle())
+        .safeHelp(tooltip)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    private var tooltip: String {
+        var parts = [definition.name]
+        if unreadCount > 0 {
+            parts.append("(\(unreadCount) unread)")
+        } else if unreadCount == -1 {
+            parts.append("(unread)")
+        }
+        if let shortcut = definition.shortcut {
+            parts.append("(prefix+\(shortcut))")
+        }
+        return parts.joined(separator: " ")
     }
 }
 

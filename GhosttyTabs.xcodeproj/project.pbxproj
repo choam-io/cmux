@@ -45,6 +45,8 @@
 			PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */; };
 			WEBAPP04 /* WebAppDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP01 /* WebAppDefinition.swift */; };
 			WEBAPP05 /* WebAppManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP02 /* WebAppManager.swift */; };
+			PERSIST01B /* PersistentWorkspaceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = PERSIST01 /* PersistentWorkspaceConfig.swift */; };
+			PERSIST02B /* PersistentWorkspaceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = PERSIST02 /* PersistentWorkspaceManager.swift */; };
 			WEBAPP06 /* WebAppNotificationHook.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP03 /* WebAppNotificationHook.swift */; };
 			DKBND01 /* DirectKeyBindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DKBND00 /* DirectKeyBindings.swift */; };
 			FGPD01 /* ForegroundProcessDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FGPD00 /* ForegroundProcessDetector.swift */; };
@@ -234,6 +236,8 @@
 		PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+PrefixKeyMode.swift"; sourceTree = "<group>"; };
 		WEBAPP01 /* WebAppDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppDefinition.swift"; sourceTree = "<group>"; };
 		WEBAPP02 /* WebAppManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppManager.swift"; sourceTree = "<group>"; };
+		PERSIST01 /* PersistentWorkspaceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PersistentWorkspaces/PersistentWorkspaceConfig.swift"; sourceTree = "<group>"; };
+		PERSIST02 /* PersistentWorkspaceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PersistentWorkspaces/PersistentWorkspaceManager.swift"; sourceTree = "<group>"; };
 		WEBAPP03 /* WebAppNotificationHook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppNotificationHook.swift"; sourceTree = "<group>"; };
 		DKBND00 /* DirectKeyBindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectKeyBindings.swift; sourceTree = "<group>"; };
 		FGPD00 /* ForegroundProcessDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundProcessDetector.swift; sourceTree = "<group>"; };
@@ -464,6 +468,8 @@
 				FGPD00 /* ForegroundProcessDetector.swift */,
 				WEBAPP01 /* WebAppDefinition.swift */,
 				WEBAPP02 /* WebAppManager.swift */,
+				PERSIST01 /* PersistentWorkspaceConfig.swift */,
+				PERSIST02 /* PersistentWorkspaceManager.swift */,
 				WEBAPP03 /* WebAppNotificationHook.swift */,
 				A5001091 /* NotificationsPage.swift */,
 				A5001092 /* TerminalNotificationStore.swift */,
@@ -621,6 +627,7 @@
 					A5001271 /* PostHog */,
 					A5001261 /* Bonsplit */,
 					A5001291 /* MarkdownUI */,
+					A50012B1 /* Yams */,
 				);
 			name = GhosttyTabs;
 			productName = GhosttyTabs;
@@ -724,6 +731,7 @@
 					A5001272 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 					A5001292 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 					A5001260 /* XCLocalSwiftPackageReference "bonsplit" */,
+					A50012B2 /* XCRemoteSwiftPackageReference "Yams" */,
 				);
 			productRefGroup = A5001042 /* Products */;
 			projectDirPath = "";
@@ -771,6 +779,8 @@
 				PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */,
 				WEBAPP04 /* WebAppDefinition.swift in Sources */,
 				WEBAPP05 /* WebAppManager.swift in Sources */,
+				PERSIST01B /* PersistentWorkspaceConfig.swift in Sources */,
+				PERSIST02B /* PersistentWorkspaceManager.swift in Sources */,
 				WEBAPP06 /* WebAppNotificationHook.swift in Sources */,
 				DKBND01 /* DirectKeyBindings.swift in Sources */,
 				FGPD01 /* ForegroundProcessDetector.swift in Sources */,
@@ -1192,6 +1202,14 @@
 				isa = XCLocalSwiftPackageReference;
 				relativePath = vendor/bonsplit;
 			};
+			A50012B2 /* XCRemoteSwiftPackageReference "Yams" */ = {
+				isa = XCRemoteSwiftPackageReference;
+				repositoryURL = "https://github.com/jpsim/Yams.git";
+				requirement = {
+					kind = upToNextMajorVersion;
+					minimumVersion = 5.1.0;
+				};
+			};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1219,6 +1237,11 @@
 				isa = XCSwiftPackageProductDependency;
 				package = A5001292 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 				productName = MarkdownUI;
+			};
+			A50012B1 /* Yams */ = {
+				isa = XCSwiftPackageProductDependency;
+				package = A50012B2 /* XCRemoteSwiftPackageReference "Yams" */;
+				productName = Yams;
 			};
 /* End XCSwiftPackageProductDependency section */
 
