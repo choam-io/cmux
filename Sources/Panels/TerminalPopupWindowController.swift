@@ -35,7 +35,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 
     enum PopupTabContent {
         case terminal(surface: TerminalSurface)
-        case browser(webView: WKWebView, url: URL?)
+        case browser(container: PopupBrowserContainer)
     }
 
     final class PopupTab {
@@ -49,8 +49,8 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             switch content {
             case .terminal(let surface):
                 return surface.hostedView
-            case .browser(let webView, _):
-                return webView
+            case .browser(let container):
+                return container
             }
         }
 
@@ -59,8 +59,8 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
             switch content {
             case .terminal(let surface):
                 return surface.focusableView
-            case .browser(let webView, _):
-                return webView
+            case .browser(let container):
+                return container.addressField
             }
         }
 
@@ -292,19 +292,18 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         title: String? = nil,
         select: Bool = true
     ) -> PopupTab {
-        let webView = WKWebView(frame: .zero)
-        webView.load(URLRequest(url: url))
+        let container = PopupBrowserContainer(url: url)
 
-        let tabTitle = title ?? url.host ?? "Browser"
+        let tabTitle = title ?? (url.absoluteString == "about:blank" ? "New tab" : url.host ?? "Browser")
         let tab = PopupTab(
             title: tabTitle,
             iconSystemName: "globe",
-            content: .browser(webView: webView, url: url)
+            content: .browser(container: container)
         )
 
         // Observe title changes from the web page
         let tabId = tab.id
-        let observer = webView.observe(\.title, options: [.new]) { [weak self, weak tab] _, change in
+        let observer = container.webView.observe(\.title, options: [.new]) { [weak self, weak tab] _, change in
             guard let self, let tab else { return }
             if let newTitle = change.newValue ?? nil, !newTitle.isEmpty {
                 tab.title = newTitle
@@ -316,6 +315,15 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         browserTitleObservers[tabId] = observer
 
         insertTab(tab, select: select)
+
+        // Focus address bar for blank tabs
+        if url.absoluteString == "about:blank", select {
+            DispatchQueue.main.async { [weak self] in
+                self?.panel?.makeFirstResponder(container.addressField)
+                container.addressField.selectText(nil)
+            }
+        }
+
         return tab
     }
 
@@ -733,6 +741,167 @@ final class PopupTabBarView: NSView {
 
     @objc private func tabButtonClicked(_ sender: NSButton) {
         controller?.selectTab(at: sender.tag)
+    }
+}
+
+// MARK: - PopupBrowserContainer
+
+/// Browser view with address bar + back/forward/reload + WKWebView.
+@MainActor
+final class PopupBrowserContainer: NSView, NSTextFieldDelegate {
+    let webView: WKWebView
+    let addressField: NSTextField
+    private let backButton: NSButton
+    private let forwardButton: NSButton
+    private let reloadButton: NSButton
+    private let toolbar: NSView
+    private var urlObserver: NSKeyValueObservation?
+
+    init(url: URL) {
+        let wv = WKWebView(frame: .zero)
+        self.webView = wv
+
+        // Address bar
+        let field = NSTextField(frame: .zero)
+        field.placeholderString = "Search or enter URL"
+        field.font = .systemFont(ofSize: 12)
+        field.isBordered = true
+        field.bezelStyle = .roundedBezel
+        field.isEditable = true
+        field.isSelectable = true
+        field.cell?.sendsActionOnEndEditing = false
+        field.stringValue = url.absoluteString == "about:blank" ? "" : url.absoluteString
+        self.addressField = field
+
+        // Nav buttons
+        let back = NSButton(image: NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back")!, target: nil, action: nil)
+        back.isBordered = false
+        back.bezelStyle = .inline
+        back.imageScaling = .scaleProportionallyDown
+        back.setButtonType(.momentaryPushIn)
+        self.backButton = back
+
+        let forward = NSButton(image: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "Forward")!, target: nil, action: nil)
+        forward.isBordered = false
+        forward.bezelStyle = .inline
+        forward.imageScaling = .scaleProportionallyDown
+        forward.setButtonType(.momentaryPushIn)
+        self.forwardButton = forward
+
+        let reload = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Reload")!, target: nil, action: nil)
+        reload.isBordered = false
+        reload.bezelStyle = .inline
+        reload.imageScaling = .scaleProportionallyDown
+        reload.setButtonType(.momentaryPushIn)
+        self.reloadButton = reload
+
+        // Toolbar container
+        let bar = NSView(frame: .zero)
+        bar.wantsLayer = true
+        bar.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        self.toolbar = bar
+
+        super.init(frame: .zero)
+        wantsLayer = true
+
+        // Wire targets
+        field.delegate = self
+        field.target = self
+        field.action = #selector(addressFieldSubmitted)
+        back.target = self
+        back.action = #selector(goBack)
+        forward.target = self
+        forward.action = #selector(goForward)
+        reload.target = self
+        reload.action = #selector(doReload)
+
+        // Layout
+        for v in [bar, wv] as [NSView] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(v)
+        }
+        for v in [back, forward, reload, field] as [NSView] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            bar.addSubview(v)
+        }
+
+        let toolbarHeight: CGFloat = 36
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: topAnchor),
+            bar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            bar.heightAnchor.constraint(equalToConstant: toolbarHeight),
+
+            back.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 8),
+            back.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            back.widthAnchor.constraint(equalToConstant: 24),
+            back.heightAnchor.constraint(equalToConstant: 24),
+
+            forward.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 2),
+            forward.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            forward.widthAnchor.constraint(equalToConstant: 24),
+            forward.heightAnchor.constraint(equalToConstant: 24),
+
+            reload.leadingAnchor.constraint(equalTo: forward.trailingAnchor, constant: 4),
+            reload.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            reload.widthAnchor.constraint(equalToConstant: 24),
+            reload.heightAnchor.constraint(equalToConstant: 24),
+
+            field.leadingAnchor.constraint(equalTo: reload.trailingAnchor, constant: 8),
+            field.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8),
+            field.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            field.heightAnchor.constraint(equalToConstant: 24),
+
+            wv.topAnchor.constraint(equalTo: bar.bottomAnchor),
+            wv.leadingAnchor.constraint(equalTo: leadingAnchor),
+            wv.trailingAnchor.constraint(equalTo: trailingAnchor),
+            wv.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        // Observe URL changes to update address bar
+        urlObserver = wv.observe(\.url, options: [.new]) { [weak self] _, change in
+            guard let self else { return }
+            if let newURL = change.newValue ?? nil {
+                DispatchQueue.main.async {
+                    self.addressField.stringValue = newURL.absoluteString
+                }
+            }
+        }
+
+        // Load initial URL
+        if url.absoluteString != "about:blank" {
+            wv.load(URLRequest(url: url))
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) not implemented")
+    }
+
+    @objc private func addressFieldSubmitted() {
+        var text = addressField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if !text.contains("://") {
+            // If it looks like a URL, add https://. Otherwise treat as search.
+            if text.contains(".") && !text.contains(" ") {
+                text = "https://" + text
+            } else {
+                text = "https://www.google.com/search?q=" + (text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text)
+            }
+        }
+        guard let url = URL(string: text) else { return }
+        webView.load(URLRequest(url: url))
+        // Return focus to webview after navigation
+        window?.makeFirstResponder(webView)
+    }
+
+    @objc private func goBack() { webView.goBack() }
+    @objc private func goForward() { webView.goForward() }
+    @objc private func doReload() { webView.reload() }
+
+    override func updateLayer() {
+        super.updateLayer()
+        toolbar.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
 }
 

@@ -6703,26 +6703,8 @@ class TerminalController {
     }
 
     func popupPromptBrowserTab() {
-        let alert = NSAlert()
-        alert.messageText = "Open URL in popup"
-        alert.informativeText = "Enter a URL to open as a browser tab."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Open")
-        alert.addButton(withTitle: "Cancel")
-
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        input.stringValue = "https://"
-        input.placeholderString = "https://example.com"
-        alert.accessoryView = input
-        alert.window.initialFirstResponder = input
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        var urlString = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !urlString.isEmpty && !urlString.contains("://") {
-            urlString = "https://" + urlString
-        }
-        guard let url = URL(string: urlString) else { return }
-        popupAddBrowserTab(url: url)
+        // Open a blank browser tab directly -- address bar is inline
+        popupController?.addBrowserTab(url: URL(string: "about:blank")!, title: "New tab")
     }
 
     func popupCloseSelectedTab() {
