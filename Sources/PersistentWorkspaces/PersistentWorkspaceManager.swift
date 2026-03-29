@@ -355,13 +355,57 @@ final class PersistentWorkspaceManager: ObservableObject {
     // MARK: - Config Changes
 
     private func handleConfigChange() {
-        // For now, just update definitions. Active workspaces keep running
-        // even if their definition is removed from config (they'll just
-        // stop being recreated on next launch).
-        // Future: could reconcile active workspaces with config changes.
+        let currentDefIds = Set(configStore.definitions.map(\.id))
+        // Find active persistent workspaces whose definitions were removed
+        let removedIds = activeIds.filter { !currentDefIds.contains($0) }
+
         #if DEBUG
-        dlog("persistent.configChanged definitions=\(configStore.definitions.count)")
+        dlog("persistent.configChanged definitions=\(configStore.definitions.count) removed=\(removedIds.count)")
         #endif
+
+        for removedId in removedIds {
+            guard let workspaceId = workspaceIds[removedId] else { continue }
+            guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: workspaceId) else { continue }
+            guard let workspace = tabManager.tabs.first(where: { $0.id == workspaceId }) else { continue }
+
+            let name = workspace.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+                ?? workspace.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = name.isEmpty ? "Workspace" : name
+
+            let alert = NSAlert()
+            alert.messageText = String(
+                format: String(localized: "persistent.removed.title", defaultValue: "\"%@\" removed from config"),
+                displayName
+            )
+            alert.informativeText = String(
+                localized: "persistent.removed.message",
+                defaultValue: "This workspace was removed from workspaces.yaml. Close it, or keep it as a regular workspace?"
+            )
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: String(
+                localized: "persistent.removed.close",
+                defaultValue: "Close"
+            ))
+            alert.addButton(withTitle: String(
+                localized: "persistent.removed.keep",
+                defaultValue: "Keep"
+            ))
+
+            let response = alert.runModal()
+
+            // Unregister from persistent tracking either way
+            workspaceIds.removeValue(forKey: removedId)
+            panelIds.removeValue(forKey: removedId)
+            activeIds.remove(removedId)
+            unreadCounts.removeValue(forKey: removedId)
+            messageHandlers.removeValue(forKey: removedId)
+
+            if response == .alertFirstButtonReturn {
+                // Close
+                tabManager.closeWorkspace(workspace)
+            }
+            // else: Keep -- workspace stays as a regular (already pinned) workspace
+        }
     }
 }
 
