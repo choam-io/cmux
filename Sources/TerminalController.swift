@@ -6680,6 +6680,24 @@ class TerminalController {
         controller.toggle()
     }
 
+    // MARK: - Popup Tab Forwarding (called from AppDelegate shortcut handler)
+
+    func popupAddTerminalTab() {
+        popupController?.addTerminalTab()
+    }
+
+    func popupCloseSelectedTab() {
+        popupController?.closeSelectedTab()
+    }
+
+    func popupSelectNextTab() {
+        popupController?.selectNextTab()
+    }
+
+    func popupSelectPreviousTab() {
+        popupController?.selectPreviousTab()
+    }
+
     private func v2PopupToggle(params: [String: Any]) -> V2CallResult {
         let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -9147,10 +9147,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return true
         }
 
-        // If the popup overlay is focused, let it handle Cmd+T/W/Ctrl+Tab.
-        // Don't intercept shortcuts the popup needs for tab management.
+        // If the popup overlay is focused, handle its tab shortcuts here
+        // (consuming the event) so the main menu doesn't steal them.
         if let keyWindow = NSApp.keyWindow,
            keyWindow.identifier?.rawValue == "cmux.terminal-popup" {
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let hasCmd = flags.contains(.command)
+            let hasCtrl = flags.contains(.control)
+            let hasOpt = flags.contains(.option)
+            let chars = event.charactersIgnoringModifiers
+
+            if hasCmd && !hasCtrl && !hasOpt && chars == "t" {
+                TerminalController.shared.popupAddTerminalTab()
+                return true
+            }
+            if hasCmd && !hasCtrl && !hasOpt && chars == "w" {
+                TerminalController.shared.popupCloseSelectedTab()
+                return true
+            }
+            if hasCtrl && event.keyCode == 48 /* Tab */ {
+                if flags.contains(.shift) {
+                    TerminalController.shared.popupSelectPreviousTab()
+                } else {
+                    TerminalController.shared.popupSelectNextTab()
+                }
+                return true
+            }
             return false
         }
 
