@@ -538,12 +538,25 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
 final class PopupTabBarView: NSView {
     private weak var controller: TerminalPopupWindowController?
     private var tabButtons: [NSButton] = []
+    private let separator = NSView()
 
     init(controller: TerminalPopupWindowController) {
         self.controller = controller
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95).cgColor
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+
+        // Bottom separator line
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        addSubview(separator)
+        NSLayoutConstraint.activate([
+            separator.leadingAnchor.constraint(equalTo: leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: trailingAnchor),
+            separator.bottomAnchor.constraint(equalTo: bottomAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1),
+        ])
     }
 
     required init?(coder: NSCoder) {
@@ -552,7 +565,8 @@ final class PopupTabBarView: NSView {
 
     override func updateLayer() {
         super.updateLayer()
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95).cgColor
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        separator.layer?.backgroundColor = NSColor.separatorColor.cgColor
     }
 
     func refresh(tabs: [TerminalPopupWindowController.PopupTab], selectedIndex: Int) {
@@ -597,7 +611,7 @@ final class PopupTabBarView: NSView {
 
             button.wantsLayer = true
             if isSelected {
-                button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+                button.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
                 button.layer?.cornerRadius = 6
             }
 
