@@ -661,10 +661,14 @@ private class TerminalPopupPanel: NSPanel {
         // Intercept key equivalents before they reach the terminal view
         if event.type == .keyDown {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let hasCmd = flags.contains(.command)
+            let hasCtrl = flags.contains(.control)
+            let hasShift = flags.contains(.shift)
+            let hasOpt = flags.contains(.option)
 
             // Ctrl+Tab / Ctrl+Shift+Tab to cycle popup tabs
-            if flags.contains(.control) && event.keyCode == 48 /* Tab */ {
-                if flags.contains(.shift) {
+            if hasCtrl && event.keyCode == 48 /* Tab */ {
+                if hasShift {
                     popupController?.selectPreviousTab()
                 } else {
                     popupController?.selectNextTab()
@@ -672,14 +676,14 @@ private class TerminalPopupPanel: NSPanel {
                 return
             }
 
-            // Cmd+W to close current tab
-            if flags == .command && event.charactersIgnoringModifiers == "w" {
+            // Cmd+W to close current tab (no other modifiers)
+            if hasCmd && !hasCtrl && !hasOpt && event.charactersIgnoringModifiers == "w" {
                 popupController?.closeSelectedTab()
                 return
             }
 
-            // Cmd+T to add a new terminal tab
-            if flags == .command && event.charactersIgnoringModifiers == "t" {
+            // Cmd+T to add a new terminal tab (no other modifiers)
+            if hasCmd && !hasCtrl && !hasOpt && event.charactersIgnoringModifiers == "t" {
                 popupController?.addTerminalTab()
                 return
             }
