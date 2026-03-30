@@ -240,10 +240,11 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         )
         panel.setFrame(startFrame, display: false)
         panel.alphaValue = 1
-        panel.makeKeyAndOrderFront(nil)
-
-        // Bring nsmux to front
-        NSApp.activate(ignoringOtherApps: true)
+        // Use orderFrontRegardless + makeKey so the popup appears and accepts
+        // keyboard input without activating the app (which would cause Aerospace
+        // to switch to the nsmux workspace).
+        panel.orderFrontRegardless()
+        panel.makeKey()
 
         // Slide down animation
         NSAnimationContext.runAnimationGroup { ctx in
@@ -431,7 +432,7 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
         let frame = computeDropdownFrame()
         let newPanel = TerminalPopupPanel(
             contentRect: frame,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
