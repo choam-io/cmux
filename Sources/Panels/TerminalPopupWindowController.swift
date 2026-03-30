@@ -1,7 +1,40 @@
 import AppKit
 import Bonsplit
+import Carbon.HIToolbox
 import Combine
 import WebKit
+
+// MARK: - Carbon Global Hot Key Callback
+
+/// C-compatible callback for the Carbon RegisterEventHotKey system.
+/// Fires on the main thread regardless of which app is focused.
+private func popupCarbonHotKeyHandler(
+    _ nextHandler: EventHandlerCallRef?,
+    _ event: EventRef?,
+    _ userData: UnsafeMutableRawPointer?
+) -> OSStatus {
+    guard let event else { return OSStatus(eventNotHandledErr) }
+
+    var hotKeyID = EventHotKeyID()
+    let status = GetEventParameter(
+        event,
+        EventParamName(kEventParamDirectObject),
+        EventParamType(typeEventHotKeyID),
+        nil,
+        MemoryLayout<EventHotKeyID>.size,
+        nil,
+        &hotKeyID
+    )
+    guard status == noErr, hotKeyID.id == 1 else {
+        return OSStatus(eventNotHandledErr)
+    }
+
+    DispatchQueue.main.async {
+        TerminalController.shared.togglePopup(parentWindow: nil)
+    }
+
+    return noErr
+}
 
 /// Guake-style global dropdown terminal with tabbed panels.
 /// Drops down from the top of the screen, toggled via a global hotkey.
@@ -88,8 +121,8 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     private var tabBarView: PopupTabBarView?
     private var contentArea: NSView?
     private var browserTitleObservers: [UUID: NSKeyValueObservation] = [:]
-    private var globalHotkeyMonitor: Any?
-    private var localHotkeyMonitor: Any?
+    private var carbonHotKeyRef: EventHotKeyRef?
+    private var carbonEventHandlerRef: EventHandlerRef?
 
     var selectedTab: PopupTab? {
         guard selectedTabIndex >= 0, selectedTabIndex < tabs.count else { return nil }
@@ -101,59 +134,72 @@ final class TerminalPopupWindowController: NSObject, NSWindowDelegate {
     init(config: Config = Config()) {
         self.config = config
         super.init()
-        installGlobalHotkey()
+        installCarbonHotKey()
     }
 
     deinit {
-        if let monitor = globalHotkeyMonitor {
-            NSEvent.removeMonitor(monitor)
+        if let ref = carbonHotKeyRef {
+            UnregisterEventHotKey(ref)
         }
-        if let monitor = localHotkeyMonitor {
-            NSEvent.removeMonitor(monitor)
+        if let ref = carbonEventHandlerRef {
+            RemoveEventHandler(ref)
         }
         for obs in childExitObservations.values {
             NotificationCenter.default.removeObserver(obs)
         }
     }
 
-    // MARK: - Global Hotkey (Cmd+')
+    // MARK: - Global Hotkey (Cmd+') via Carbon RegisterEventHotKey
 
-    private func installGlobalHotkey() {
-        // Request accessibility if needed (global monitor requires it)
-        if !AXIsProcessTrusted() {
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-            AXIsProcessTrustedWithOptions(options)
+    /// Registers a system-wide hot key using Carbon's RegisterEventHotKey.
+    /// Unlike NSEvent.addGlobalMonitorForEvents, this works reliably from
+    /// any application without requiring accessibility permissions.
+    private func installCarbonHotKey() {
+        // Install a Carbon event handler for kEventHotKeyPressed
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            popupCarbonHotKeyHandler,
+            1,
+            &eventType,
+            nil,  // userData not needed -- callback uses TerminalController.shared
+            &carbonEventHandlerRef
+        )
+
+        guard handlerStatus == noErr else {
+            #if DEBUG
+            dlog("popup.hotkey: failed to install Carbon event handler: \(handlerStatus)")
+            #endif
+            return
         }
 
-        // Global monitor: fires when nsmux is NOT the active app
-        globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if Self.isDropdownHotkey(event) {
-                DispatchQueue.main.async {
-                    self?.toggle()
-                }
-            }
-        }
+        // Register Cmd+' (virtual key code 39 = apostrophe, cmdKey modifier)
+        // Signature "CMUX" as OSType
+        let hotKeyID = EventHotKeyID(
+            signature: OSType(0x434D5558),  // "CMUX"
+            id: 1
+        )
 
-        // Local monitor: fires when nsmux IS the active app
-        localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if Self.isDropdownHotkey(event) {
-                DispatchQueue.main.async {
-                    self?.toggle()
-                }
-                return nil // consume
-            }
-            return event
-        }
-    }
+        let registerStatus = RegisterEventHotKey(
+            UInt32(kVK_ANSI_Quote),  // key code 39
+            UInt32(cmdKey),
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &carbonHotKeyRef
+        )
 
-    /// Check if event is Cmd+' (key code 39)
-    private static func isDropdownHotkey(_ event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        return flags.contains(.command)
-            && !flags.contains(.control)
-            && !flags.contains(.option)
-            && !flags.contains(.shift)
-            && event.keyCode == 39 // apostrophe
+        #if DEBUG
+        if registerStatus == noErr {
+            dlog("popup.hotkey: registered Carbon hot key Cmd+' (kVK_ANSI_Quote)")
+        } else {
+            dlog("popup.hotkey: failed to register Carbon hot key: \(registerStatus)")
+        }
+        #endif
     }
 
     // MARK: - Public API
