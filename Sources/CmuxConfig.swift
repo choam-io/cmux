@@ -4,6 +4,47 @@ import Foundation
 
 struct CmuxConfigFile: Codable, Sendable {
     var commands: [CmuxCommandDefinition]
+    var bookmarks: [BookmarkDefinition]?
+}
+
+// MARK: - Bookmark Definitions
+
+enum BookmarkType: String, Codable, Sendable {
+    case browser
+    case terminal
+}
+
+struct BookmarkDefinition: Codable, Sendable, Identifiable {
+    let id: String
+    let name: String
+    let icon: String?
+    let type: BookmarkType
+    let url: String?
+    let command: String?
+    let cwd: String?
+
+    var validationError: String? {
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Bookmark '\(id)' has an empty name"
+        }
+        switch type {
+        case .browser:
+            if url == nil || url?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+                return "Bookmark '\(id)' (browser) requires a 'url'"
+            }
+        case .terminal:
+            break // command is optional -- defaults to a shell
+        }
+        return nil
+    }
+
+    var commandId: String {
+        "cmux.config.bookmark." + (id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id)
+    }
+
+    var resolvedIcon: String {
+        icon ?? (type == .browser ? "globe" : "terminal")
+    }
 }
 
 struct CmuxCommandDefinition: Codable, Sendable, Identifiable {
@@ -259,6 +300,7 @@ enum CmuxSurfaceType: String, Codable, Sendable {
 @MainActor
 final class CmuxConfigStore: ObservableObject {
     @Published private(set) var loadedCommands: [CmuxCommandDefinition] = []
+    @Published private(set) var loadedBookmarks: [BookmarkDefinition] = []
     @Published private(set) var configRevision: UInt64 = 0
 
     /// Which config file each command came from, keyed by command id.
@@ -353,6 +395,8 @@ final class CmuxConfigStore: ObservableObject {
         var commands: [CmuxCommandDefinition] = []
         var seenNames = Set<String>()
         var sourcePaths: [String: String] = [:]
+        var bookmarks: [BookmarkDefinition] = []
+        var seenBookmarkIds = Set<String>()
 
         // Local config takes precedence
         if let localPath = localConfigPath {
@@ -362,6 +406,16 @@ final class CmuxConfigStore: ObservableObject {
                         commands.append(command)
                         seenNames.insert(command.name)
                         sourcePaths[command.id] = localPath
+                    }
+                }
+                for bookmark in localConfig.bookmarks ?? [] {
+                    if let error = bookmark.validationError {
+                        NSLog("[CmuxConfig] bookmark validation error in %@: %@", localPath, error)
+                        continue
+                    }
+                    if !seenBookmarkIds.contains(bookmark.id) {
+                        bookmarks.append(bookmark)
+                        seenBookmarkIds.insert(bookmark.id)
                     }
                 }
             }
@@ -376,9 +430,20 @@ final class CmuxConfigStore: ObservableObject {
                     sourcePaths[command.id] = globalConfigPath
                 }
             }
+            for bookmark in globalConfig.bookmarks ?? [] {
+                if let error = bookmark.validationError {
+                    NSLog("[CmuxConfig] bookmark validation error in %@: %@", globalConfigPath, error)
+                    continue
+                }
+                if !seenBookmarkIds.contains(bookmark.id) {
+                    bookmarks.append(bookmark)
+                    seenBookmarkIds.insert(bookmark.id)
+                }
+            }
         }
 
         loadedCommands = commands
+        loadedBookmarks = bookmarks
         commandSourcePaths = sourcePaths
         configRevision &+= 1
     }

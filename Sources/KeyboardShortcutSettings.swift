@@ -52,6 +52,9 @@ enum KeyboardShortcutSettings {
         // Web Apps
         case toggleWebApp
 
+        // Bookmarks
+        case openBookmarks
+
         var id: String { rawValue }
 
         var label: String {
@@ -91,6 +94,7 @@ enum KeyboardShortcutSettings {
             case .showBrowserJavaScriptConsole: return String(localized: "shortcut.showBrowserJSConsole.label", defaultValue: "Show Browser JavaScript Console")
             case .togglePopup: return String(localized: "shortcut.togglePopup.label", defaultValue: "Toggle Popup Terminal")
             case .toggleWebApp: return String(localized: "shortcut.toggleWebApp.label", defaultValue: "Toggle Web App")
+            case .openBookmarks: return String(localized: "shortcut.openBookmarks.label", defaultValue: "Open Bookmarks")
             }
         }
 
@@ -131,6 +135,7 @@ enum KeyboardShortcutSettings {
             case .showBrowserJavaScriptConsole: return "shortcut.showBrowserJavaScriptConsole"
             case .togglePopup: return "shortcut.togglePopup"
             case .toggleWebApp: return "shortcut.toggleWebApp"
+            case .openBookmarks: return "shortcut.openBookmarks"
             }
         }
 
@@ -210,6 +215,9 @@ enum KeyboardShortcutSettings {
             case .toggleWebApp:
                 // No default Cmd shortcut -- use prefix+S
                 return StoredShortcut(key: "s", command: true, shift: true, option: true, control: false)
+            case .openBookmarks:
+                // No default Cmd shortcut -- use prefix+B
+                return StoredShortcut(key: "b", command: true, shift: true, option: true, control: false)
             }
         }
 

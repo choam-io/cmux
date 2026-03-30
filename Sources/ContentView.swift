@@ -1780,6 +1780,7 @@ struct ContentView: View {
     private enum CommandPaletteListScope: String {
         case commands
         case switcher
+        case bookmarks
     }
 
     enum CommandPalettePendingActivation: Equatable {
@@ -2198,6 +2199,7 @@ struct ContentView: View {
     )
     private static let commandPaletteUsageDefaultsKey = "commandPalette.commandUsage.v1"
     nonisolated private static let commandPaletteCommandsPrefix = ">"
+    nonisolated private static let commandPaletteBookmarksPrefix = "@"
     private static let commandPaletteVisiblePreviewResultLimit = 48
     private static let commandPaletteVisiblePreviewCandidateLimit = 192
     private static let minimumSidebarWidth: CGFloat = CGFloat(SessionPersistencePolicy.minimumSidebarWidth)
@@ -3096,6 +3098,17 @@ struct ContentView: View {
                 mainWindow: NSApp.mainWindow
             ) else { return }
             openCommandPaletteSwitcher()
+        })
+
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .commandPaletteBookmarksRequested)) { notification in
+            let requestedWindow = notification.object as? NSWindow
+            guard Self.shouldHandleCommandPaletteRequest(
+                observedWindow: observedWindow,
+                requestedWindow: requestedWindow,
+                keyWindow: NSApp.keyWindow,
+                mainWindow: NSApp.mainWindow
+            ) else { return }
+            openCommandPaletteBookmarks()
         })
 
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .commandPaletteSubmitRequested)) { notification in
@@ -4343,6 +4356,9 @@ struct ContentView: View {
         if query.hasPrefix(Self.commandPaletteCommandsPrefix) {
             return .commands
         }
+        if query.hasPrefix(Self.commandPaletteBookmarksPrefix) {
+            return .bookmarks
+        }
         return .switcher
     }
 
@@ -4369,6 +4385,8 @@ struct ContentView: View {
             return commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherPlaceholderAllSurfaces", defaultValue: "Search workspaces and surfaces")
                 : String(localized: "commandPalette.search.switcherPlaceholder", defaultValue: "Search workspaces")
+        case .bookmarks:
+            return String(localized: "commandPalette.search.bookmarksPlaceholder", defaultValue: "Search bookmarks")
         }
     }
 
@@ -4380,6 +4398,8 @@ struct ContentView: View {
             return commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherEmptyAllSurfaces", defaultValue: "No workspaces or surfaces match your search.")
                 : String(localized: "commandPalette.search.switcherEmpty", defaultValue: "No workspaces match your search.")
+        case .bookmarks:
+            return String(localized: "commandPalette.search.bookmarksEmpty", defaultValue: "No bookmarks match your search.")
         }
     }
 
@@ -4425,6 +4445,9 @@ struct ContentView: View {
         case .commands:
             let suffix = String(query.dropFirst(Self.commandPaletteCommandsPrefix.count))
             return suffix.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .bookmarks:
+            let suffix = String(query.dropFirst(Self.commandPaletteBookmarksPrefix.count))
+            return suffix.trimmingCharacters(in: .whitespacesAndNewlines)
         case .switcher:
             return query.trimmingCharacters(in: .whitespacesAndNewlines)
         }
@@ -4447,6 +4470,8 @@ struct ContentView: View {
             return commandPaletteCommands(commandsContext: commandsContext ?? commandPaletteCachedCommandsContext())
         case .switcher:
             return commandPaletteSwitcherEntries(includeSurfaces: includeSurfaces)
+        case .bookmarks:
+            return commandPaletteBookmarkEntries()
         }
     }
 
@@ -4866,6 +4891,8 @@ struct ContentView: View {
             )
         case .switcher:
             return commandPaletteSwitcherEntriesFingerprint(includeSurfaces: includeSurfaces)
+        case .bookmarks:
+            return commandPaletteBookmarksFingerprint()
         }
     }
 
@@ -4874,6 +4901,74 @@ struct ContentView: View {
         hasher.combine(commandsContext.snapshot.fingerprint())
         hasher.combine(cmuxConfigStore.configRevision)
         return hasher.finalize()
+    }
+
+    private func commandPaletteBookmarksFingerprint() -> Int {
+        var hasher = Hasher()
+        hasher.combine(cmuxConfigStore.configRevision)
+        hasher.combine(cmuxConfigStore.loadedBookmarks.count)
+        return hasher.finalize()
+    }
+
+    private func commandPaletteBookmarkEntries() -> [CommandPaletteCommand] {
+        var entries: [CommandPaletteCommand] = []
+        for (rank, bookmark) in cmuxConfigStore.loadedBookmarks.enumerated() {
+            let captured = bookmark
+            let kindLabel: String
+            switch bookmark.type {
+            case .browser:
+                kindLabel = String(localized: "commandPalette.kind.browser", defaultValue: "Browser")
+            case .terminal:
+                kindLabel = String(localized: "commandPalette.kind.terminal", defaultValue: "Terminal")
+            }
+            entries.append(CommandPaletteCommand(
+                id: bookmark.commandId,
+                rank: rank,
+                title: bookmark.name,
+                subtitle: bookmarkSubtitle(bookmark),
+                shortcutHint: nil,
+                kindLabel: kindLabel,
+                keywords: [bookmark.id, bookmark.type.rawValue] + (bookmark.url.map { [$0] } ?? []),
+                dismissOnRun: true,
+                action: { [tabManager] in
+                    guard let workspace = tabManager.selectedWorkspace else { return }
+                    guard let paneId = workspace.bonsplitController.focusedPaneId
+                        ?? workspace.bonsplitController.allPaneIds.first else { return }
+                    
+                    switch captured.type {
+                    case .browser:
+                        if let urlString = captured.url, let url = URL(string: urlString) {
+                            workspace.newBrowserSurface(inPane: paneId, url: url, focus: true)
+                        }
+                    case .terminal:
+                        let cwd = captured.cwd ?? workspace.currentDirectory
+                        // Wrap command so shell stays open after it exits
+                        let wrappedCommand: String?
+                        if let cmd = captured.command, !cmd.isEmpty {
+                            wrappedCommand = "/bin/zsh -c '\(cmd); exec /bin/zsh'"
+                        } else {
+                            wrappedCommand = nil
+                        }
+                        workspace.newTerminalSurface(
+                            inPane: paneId,
+                            focus: true,
+                            workingDirectory: cwd,
+                            initialCommand: wrappedCommand
+                        )
+                    }
+                }
+            ))
+        }
+        return entries
+    }
+
+    private func bookmarkSubtitle(_ bookmark: BookmarkDefinition) -> String {
+        switch bookmark.type {
+        case .browser:
+            return bookmark.url ?? String(localized: "bookmark.subtitle.browser", defaultValue: "Browser")
+        case .terminal:
+            return bookmark.command ?? String(localized: "bookmark.subtitle.terminal", defaultValue: "Terminal")
+        }
     }
 
     private func commandPaletteSwitcherEntriesFingerprint(includeSurfaces: Bool) -> Int {
@@ -6219,6 +6314,42 @@ struct ContentView: View {
             )
         }
 
+        // Bookmark entries appear in commands mode as "Bookmark: {name}"
+        for bookmark in cmuxConfigStore.loadedBookmarks {
+            let bookmarkName = sanitizeCmuxConfigPaletteText(bookmark.name)
+            let subtitle: (CommandPaletteContextSnapshot) -> String
+            switch bookmark.type {
+            case .browser:
+                let url = bookmark.url ?? ""
+                subtitle = constant(url)
+            case .terminal:
+                let cmd = bookmark.command ?? ""
+                subtitle = constant(cmd.isEmpty ? String(localized: "bookmark.subtitle.terminal", defaultValue: "Terminal") : cmd)
+            }
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: bookmark.commandId,
+                    title: constant(String(localized: "command.bookmark.title", defaultValue: "Bookmark: \(bookmarkName)")),
+                    subtitle: subtitle,
+                    keywords: [bookmark.id, "bookmark", bookmark.type.rawValue] + (bookmark.url.map { [$0] } ?? [])
+                )
+            )
+        }
+
+        // "Open Bookmarks" command -- switches palette to bookmark mode
+        if !cmuxConfigStore.loadedBookmarks.isEmpty {
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: "palette.openBookmarks",
+                    title: constant(String(localized: "command.openBookmarks.title", defaultValue: "Open Bookmarks")),
+                    subtitle: constant(String(localized: "command.openBookmarks.subtitle", defaultValue: "Launch a bookmark")),
+                    shortcutHint: "prefix+b",
+                    keywords: ["bookmark", "launch", "open", "shortcut"],
+                    dismissOnRun: false
+                )
+            )
+        }
+
         return contributions
     }
 
@@ -6236,6 +6367,9 @@ struct ContentView: View {
     private func registerCommandPaletteHandlers(_ registry: inout CommandPaletteHandlerRegistry) {
         registry.register(commandId: "palette.newWorkspace") {
             tabManager.addWorkspace()
+        }
+        registry.register(commandId: "palette.openBookmarks") {
+            openCommandPaletteBookmarks()
         }
         registry.register(commandId: "palette.openFolder") {
             // Defer so the command palette dismisses before the modal sheet appears.
@@ -6949,8 +7083,20 @@ struct ContentView: View {
         handleCommandPaletteListRequest(scope: .switcher)
     }
 
+    private func openCommandPaletteBookmarks() {
+        handleCommandPaletteListRequest(scope: .bookmarks)
+    }
+
     private func handleCommandPaletteListRequest(scope: CommandPaletteListScope) {
-        let initialQuery = (scope == .commands) ? Self.commandPaletteCommandsPrefix : ""
+        let initialQuery: String
+        switch scope {
+        case .commands:
+            initialQuery = Self.commandPaletteCommandsPrefix
+        case .bookmarks:
+            initialQuery = Self.commandPaletteBookmarksPrefix
+        case .switcher:
+            initialQuery = ""
+        }
         guard isCommandPalettePresented else {
             presentCommandPalette(initialQuery: initialQuery)
             return

@@ -126,6 +126,10 @@ extension AppDelegate {
             if let tabManager {
                 WebAppManager.shared.toggleFirstWebApp(tabManager: tabManager)
             }
+
+        // Bookmarks
+        case .openBookmarks:
+            requestCommandPaletteBookmarks(preferredWindow: preferredWindow, source: "prefix.openBookmarks")
             
         default:
             #if DEBUG

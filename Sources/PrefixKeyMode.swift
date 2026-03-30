@@ -1,6 +1,9 @@
 import AppKit
 import Bonsplit
 import Foundation
+import os.log
+
+private let prefixLog = OSLog(subsystem: "io.choam.nsmux", category: "prefix")
 
 /// Manages tmux-style prefix key mode for keyboard shortcuts.
 /// When enabled, users press a prefix key (default: Ctrl+A) followed by an action key.
@@ -107,11 +110,11 @@ final class PrefixKeyMode {
         // Rename
         ",": .renameWorkspace, // prefix+, = rename (tmux style)
         
-        // Sidebar
-        "b": .toggleSidebar,   // prefix+b = toggle sidebar
-        
         // Popup terminal
         "i": .togglePopup,     // prefix+i = toggle popup terminal
+        
+        // Bookmarks
+        "b": .openBookmarks,   // prefix+b = open bookmark launcher
         
         // Misc
         "t": .newSurface,      // prefix+t = new tab/surface
@@ -188,10 +191,12 @@ final class PrefixKeyMode {
 
         // Look up the action
         if let action = Self.defaultBindings[key] ?? Self.defaultBindings[key.lowercased()] {
+            os_log("prefix.dispatch: '%{public}@' -> %{public}@", log: prefixLog, type: .debug, key, action.rawValue)
             postAction(action)
             return true
         }
         
+        os_log("prefix.unmapped: '%{public}@'", log: prefixLog, type: .debug, key)
         return false
     }
     
@@ -277,7 +282,7 @@ final class PrefixKeyMode {
         }
         
         postStateChange()
-        
+        os_log("prefix.enter: timeout=%.1fs", log: prefixLog, type: .debug, timeout)
         #if DEBUG
         dlog("prefix.enter: awaiting action key (timeout=\(timeout)s)")
         #endif
@@ -291,7 +296,7 @@ final class PrefixKeyMode {
         timeoutTimer = nil
         
         postStateChange()
-        
+        os_log("prefix.cancel", log: prefixLog, type: .debug)
         #if DEBUG
         dlog("prefix.cancel: mode ended")
         #endif

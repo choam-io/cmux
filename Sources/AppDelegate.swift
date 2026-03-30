@@ -4619,6 +4619,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
     }
 
+    func requestCommandPaletteBookmarks(
+        preferredWindow: NSWindow? = nil,
+        source: String = "api.commandPaletteBookmarks"
+    ) {
+        postCommandPaletteRequest(
+            name: .commandPaletteBookmarksRequested,
+            preferredWindow: preferredWindow,
+            source: source,
+            markPending: true
+        )
+    }
+
     private func clearCommandPalettePendingOpen(for window: NSWindow?) {
         guard let window,
               let windowId = mainWindowId(for: window) else { return }
