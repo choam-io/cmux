@@ -2833,6 +2833,13 @@ final class TerminalSurfaceRegistry {
         return runtimeSurfaceOwners[UInt(bitPattern: surface)]
     }
 
+    var count: Int {
+        lock.lock()
+        let c = surfaces.count
+        lock.unlock()
+        return c
+    }
+
     func allSurfaces() -> [TerminalSurface] {
         lock.lock()
         let objects = surfaces.allObjects.compactMap { $0 as? TerminalSurface }

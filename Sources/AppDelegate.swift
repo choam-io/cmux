@@ -2308,6 +2308,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Initialize the global dropdown terminal so Cmd+' hotkey is registered
         TerminalController.shared.initializeDropdown()
 
+        // Start memory telemetry to track potential leaks
+        MemoryTelemetry.shared.start()
+
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handleThemesReloadNotification(_:)),

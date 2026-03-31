@@ -6723,6 +6723,11 @@ class TerminalController {
         popupController?.selectTab(at: index)
     }
 
+    /// Number of tabs in the popup terminal (for memory telemetry).
+    var popupTabCount: Int {
+        popupController?.tabs.count ?? 0
+    }
+
     nonisolated var isPopupVisible: Bool {
         // Safe to read -- only checks a Bool on the controller
         MainActor.assumeIsolated {
