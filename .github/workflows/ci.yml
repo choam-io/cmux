@@ -235,10 +235,9 @@ jobs:
           CMUX_CLI_BIN="$CLI_BIN" python3 tests/test_cli_version_memory_guard.py
 
   tests-build-and-lag:
-    # Build the full cmux scheme and run the lag regression on WarpBuild.
-    # Keep lag validation separate from UI regressions so functional UI failures
-    # and performance regressions stay isolated. Broader interactive UI suites
-    # still run via test-e2e.yml on GitHub-hosted runners.
+    # DISABLED: Requires GUI display + socket that GitHub-hosted runners can't provide.
+    # Originally ran on WarpBuild dedicated macOS machines.
+    if: false
     runs-on: macos-15
     timeout-minutes: 20
     steps:
