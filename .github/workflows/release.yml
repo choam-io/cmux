@@ -152,6 +152,7 @@ jobs:
         if: steps.guard.outputs.skip_all != 'true'
         uses: nodeselector/setup-apple-codesign@v0.0.2
         with:
+          asset-type: certificate
           secret-value: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           certificate-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
