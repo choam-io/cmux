@@ -145,8 +145,13 @@ jobs:
           APP_PLIST="build/Build/Products/Release/cmux.app/Contents/Info.plist"
           BUILD_SHA="${{ github.sha }}"
           SHORT_SHA="${BUILD_SHA:0:7}"
-          /usr/libexec/PlistBuddy -c "Set :NsmuxBuildCommit ${SHORT_SHA}" "$APP_PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Add :NsmuxBuildCommit string ${SHORT_SHA}" "$APP_PLIST"
+
+          # Set choam-io bundle ID (separate defaults domain from upstream)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier io.choam.cmux" "$APP_PLIST"
+
+          # Stamp build commit for deck doctor
+          /usr/libexec/PlistBuddy -c "Set :BuildCommit ${SHORT_SHA}" "$APP_PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :BuildCommit string ${SHORT_SHA}" "$APP_PLIST"
 
       - name: Import signing certificate
         if: steps.guard.outputs.skip_all != 'true'
