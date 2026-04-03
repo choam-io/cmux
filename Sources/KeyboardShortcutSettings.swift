@@ -47,8 +47,6 @@ enum KeyboardShortcutSettings {
         case openBrowser
         case toggleBrowserDeveloperTools
         case showBrowserJavaScriptConsole
-        case togglePopup
-
         // Web Apps
         case toggleWebApp
 
@@ -92,7 +90,6 @@ enum KeyboardShortcutSettings {
             case .openBrowser: return String(localized: "shortcut.openBrowser.label", defaultValue: "Open Browser")
             case .toggleBrowserDeveloperTools: return String(localized: "shortcut.toggleBrowserDevTools.label", defaultValue: "Toggle Browser Developer Tools")
             case .showBrowserJavaScriptConsole: return String(localized: "shortcut.showBrowserJSConsole.label", defaultValue: "Show Browser JavaScript Console")
-            case .togglePopup: return String(localized: "shortcut.togglePopup.label", defaultValue: "Toggle Popup Terminal")
             case .toggleWebApp: return String(localized: "shortcut.toggleWebApp.label", defaultValue: "Toggle Web App")
             case .openBookmarks: return String(localized: "shortcut.openBookmarks.label", defaultValue: "Open Bookmarks")
             }
@@ -133,7 +130,6 @@ enum KeyboardShortcutSettings {
             case .openBrowser: return "shortcut.openBrowser"
             case .toggleBrowserDeveloperTools: return "shortcut.toggleBrowserDeveloperTools"
             case .showBrowserJavaScriptConsole: return "shortcut.showBrowserJavaScriptConsole"
-            case .togglePopup: return "shortcut.togglePopup"
             case .toggleWebApp: return "shortcut.toggleWebApp"
             case .openBookmarks: return "shortcut.openBookmarks"
             }
@@ -209,9 +205,6 @@ enum KeyboardShortcutSettings {
             case .showBrowserJavaScriptConsole:
                 // Safari default: Show JavaScript Console.
                 return StoredShortcut(key: "c", command: true, shift: false, option: true, control: false)
-            case .togglePopup:
-                // No default Cmd shortcut -- use prefix+i
-                return StoredShortcut(key: "i", command: true, shift: true, option: true, control: false)
             case .toggleWebApp:
                 // No default Cmd shortcut -- use prefix+S
                 return StoredShortcut(key: "s", command: true, shift: true, option: true, control: false)

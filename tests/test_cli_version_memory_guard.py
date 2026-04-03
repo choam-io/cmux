@@ -46,22 +46,6 @@ def copy_runtime_frameworks(cli_path: str, fixture_contents: str) -> None:
     frameworks_dir = os.path.join(fixture_contents, "Frameworks")
     os.makedirs(frameworks_dir, exist_ok=True)
 
-    search_roots: list[str] = []
-    current = os.path.dirname(cli_path)
-    for _ in range(4):
-        search_roots.append(os.path.join(current, "Frameworks"))
-        search_roots.append(os.path.join(current, "PackageFrameworks"))
-        parent = os.path.dirname(current)
-        if parent == current:
-            break
-        current = parent
-
-    for search_root in search_roots:
-        sentry_framework = os.path.join(search_root, "Sentry.framework")
-        if os.path.isdir(sentry_framework):
-            shutil.copytree(sentry_framework, os.path.join(frameworks_dir, "Sentry.framework"))
-            return
-
 
 def build_fixture(root: str, cli_path: str) -> str:
     app_path = os.path.join(root, "cmux.app")
