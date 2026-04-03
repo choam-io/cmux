@@ -5075,19 +5075,12 @@ struct ContentView: View {
                 let workspaceCommandId = "switcher.workspace.\(workspace.id.uuidString.lowercased())"
                 let workspaceId = workspace.id
 
-                // Check if this workspace is a persistent workspace from config
-                let persistentDef = PersistentWorkspaceManager.shared.definition(forWorkspace: workspaceId)
-                // Also check legacy web app workspaces
                 let webAppDef = WebAppManager.shared.appForWorkspace(workspaceId)
 
                 let workspaceIcon: String?
                 let workspaceShortcutHint: String?
                 let workspaceKindLabel: String
-                if let persistentDef {
-                    workspaceIcon = persistentDef.icon
-                    workspaceShortcutHint = persistentDef.shortcut.map { "prefix+\($0)" }
-                    workspaceKindLabel = String(localized: "commandPalette.kind.persistentWorkspace", defaultValue: "Pinned")
-                } else if let webAppDef {
+                if let webAppDef {
                     workspaceIcon = webAppDef.iconSystemName
                     workspaceShortcutHint = "prefix+S"
                     workspaceKindLabel = String(localized: "commandPalette.kind.persistentWorkspace", defaultValue: "Pinned")
@@ -5104,7 +5097,7 @@ struct ContentView: View {
                         "go",
                         "open",
                         workspaceName
-                    ] + windowKeywords + (persistentDef != nil || webAppDef != nil ? ["pinned", "persistent"] : []),
+                    ] + windowKeywords + (webAppDef != nil ? ["pinned", "persistent"] : []),
                     metadata: commandPaletteWorkspaceSearchMetadata(for: workspace),
                     detail: .workspace
                 )
@@ -8903,7 +8896,7 @@ struct VerticalTabsSidebar: View {
 
     var body: some View {
         let allWorkspaceCount = tabManager.tabs.count
-        let visibleWorkspaceCount = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) && !PersistentWorkspaceManager.shared.isPersistentWorkspace($0.id) }.count
+        let visibleWorkspaceCount = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }.count
         let workspaceCount = visibleWorkspaceCount
         let canCloseWorkspace = allWorkspaceCount > 1
         let workspaceNumberShortcut = self.workspaceNumberShortcut
@@ -8917,7 +8910,7 @@ struct VerticalTabsSidebar: View {
                             .frame(height: trafficLightPadding)
 
                         LazyVStack(spacing: tabRowSpacing) {
-                            let visibleTabs = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) && !PersistentWorkspaceManager.shared.isPersistentWorkspace($0.id) }
+                            let visibleTabs = tabManager.tabs.filter { !WebAppManager.shared.isWebAppWorkspace($0.id) }
                             ForEach(Array(visibleTabs.enumerated()), id: \.element.id) { index, tab in
                                 let selectedContextIds: Set<UUID> = selectedTabIds.contains(tab.id) ? selectedTabIds : [tab.id]
                                 let contextTargetIds = tabManager.tabs.compactMap { workspace in
@@ -9968,7 +9961,6 @@ private struct SidebarFooterButtons: View {
             UpdatePill(model: updateViewModel)
             Spacer(minLength: 0)
             SidebarWebAppButtons()
-            SidebarPersistentWorkspaceButtons()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -9977,13 +9969,10 @@ private struct SidebarFooterButtons: View {
 /// Sidebar footer icons for enabled web app shortcuts.
 private struct SidebarWebAppButtons: View {
     @ObservedObject private var webAppManager = WebAppManager.shared
-    @ObservedObject private var persistentManager = PersistentWorkspaceManager.shared
     @EnvironmentObject var tabManager: TabManager
 
     var body: some View {
-        // Hide legacy web app buttons when a persistent workspace covers the same app ID.
-        let persistentIds = Set(persistentManager.definitions.map(\.id))
-        ForEach(webAppManager.enabledApps.filter { !persistentIds.contains($0.id) }) { app in
+        ForEach(webAppManager.enabledApps) { app in
             SidebarWebAppButton(app: app, tabManager: tabManager)
         }
     }
@@ -10053,79 +10042,6 @@ private struct SidebarWebAppButton: View {
 }
 
 /// Sidebar footer icons for persistent workspaces defined in workspaces.yaml.
-private struct SidebarPersistentWorkspaceButtons: View {
-    @ObservedObject private var manager = PersistentWorkspaceManager.shared
-    @EnvironmentObject var tabManager: TabManager
-
-    var body: some View {
-        ForEach(manager.sidebarDefinitions) { def in
-            SidebarPersistentWorkspaceButton(definition: def, tabManager: tabManager)
-        }
-    }
-}
-
-/// Individual persistent workspace icon button with unread badge.
-private struct SidebarPersistentWorkspaceButton: View {
-    let definition: PersistentWorkspaceDefinition
-    let tabManager: TabManager
-    @ObservedObject private var manager = PersistentWorkspaceManager.shared
-    @State private var isHovered = false
-
-    private var unreadCount: Int {
-        manager.unreadCounts[definition.id] ?? 0
-    }
-
-    private var isActive: Bool {
-        guard let workspaceId = manager.workspaceIds[definition.id] else { return false }
-        return tabManager.selectedTabId == workspaceId
-    }
-
-    var body: some View {
-        Button(action: {
-            manager.toggle(definition.id, tabManager: tabManager)
-        }) {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: definition.icon ?? "square.grid.2x2")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(isActive ? .white : .secondary)
-                    .frame(width: 24, height: 24)
-
-                if unreadCount != 0 {
-                    ZStack {
-                        Circle()
-                            .fill(Color.red)
-                        if unreadCount > 0 {
-                            Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                                .font(.system(size: 7, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .frame(width: unreadCount > 0 ? 14 : 8, height: unreadCount > 0 ? 14 : 8)
-                    .offset(x: 3, y: -3)
-                }
-            }
-        }
-        .buttonStyle(SidebarFooterIconButtonStyle())
-        .safeHelp(tooltip)
-        .onHover { hovering in
-            isHovered = hovering
-        }
-    }
-
-    private var tooltip: String {
-        var parts = [definition.name]
-        if unreadCount > 0 {
-            parts.append("(\(unreadCount) unread)")
-        } else if unreadCount == -1 {
-            parts.append("(unread)")
-        }
-        if let shortcut = definition.shortcut {
-            parts.append("(prefix+\(shortcut))")
-        }
-        return parts.joined(separator: " ")
-    }
-}
-
 private struct FeedbackComposerMessageEditor: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String

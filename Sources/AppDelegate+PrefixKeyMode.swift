@@ -36,16 +36,7 @@ extension AppDelegate {
             tabManager?.selectTab(at: number - 1) // 0-indexed
         }
 
-        // Handle persistent workspace toggle by shortcut key
-        if let shortcutKey = userInfo["togglePersistentWorkspace"] as? String,
-           let tabManager {
-            PersistentWorkspaceManager.shared.toggleByShortcut(shortcutKey, tabManager: tabManager)
-        }
 
-        // Handle popup tab selection by number
-        if let popupTabIndex = userInfo["selectPopupTab"] as? Int {
-            TerminalController.shared.popupSelectTab(at: popupTabIndex)
-        }
     }
     
     private func performPrefixAction(_ action: KeyboardShortcutSettings.Action) {
@@ -117,10 +108,6 @@ extension AppDelegate {
         case .triggerFlash:
             tabManager?.triggerFocusFlash()
             
-        // Popup terminal
-        case .togglePopup:
-            TerminalController.shared.togglePopup(parentWindow: preferredWindow, command: "/bin/zsh -lic '$HOME/.cargo/bin/workmux dashboard'")
-
         // Web apps
         case .toggleWebApp:
             if let tabManager {

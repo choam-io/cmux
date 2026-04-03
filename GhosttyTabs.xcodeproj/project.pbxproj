@@ -12,6 +12,7 @@
 			E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */; };
 			F6E5D4C3B2A10001 /* NerdFontHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001 /* NerdFontHelper.swift */; };
 			B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */; };
+		TELSTUB01B /* TelemetryStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = TELSTUB01 /* TelemetryStubs.swift */; };
 			A5001003 /* TabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001013 /* TabManager.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
 			A5001005 /* GhosttyTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001015 /* GhosttyTerminalView.swift */; };
@@ -25,7 +26,6 @@
 		A5001500 /* CmuxWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001510 /* CmuxWebView.swift */; };
 		A5001501 /* UITestRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001511 /* UITestRecorder.swift */; };
 		A5001226 /* SocketControlSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001225 /* SocketControlSettings.swift */; };
-		A5001601 /* SentryHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001600 /* SentryHelper.swift */; };
 		A5001621 /* AppleScriptSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001620 /* AppleScriptSupport.swift */; };
 		A5001400 /* Panel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001410 /* Panel.swift */; };
 		A5001401 /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001411 /* TerminalPanel.swift */; };
@@ -33,7 +33,6 @@
 		A5001403 /* TerminalPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001413 /* TerminalPanelView.swift */; };
 		A5001404 /* BrowserPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001414 /* BrowserPanelView.swift */; };
 		A5007420 /* BrowserPopupWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5007421 /* BrowserPopupWindowController.swift */; };
-		NS000002 /* TerminalPopupWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = NS000001 /* TerminalPopupWindowController.swift */; };
 		A5001420 /* MarkdownPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001418 /* MarkdownPanel.swift */; };
 		A5001421 /* MarkdownPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001419 /* MarkdownPanelView.swift */; };
 		A5001290 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A5001291 /* MarkdownUI */; };
@@ -45,25 +44,18 @@
 			PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */; };
 			WEBAPP04 /* WebAppDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP01 /* WebAppDefinition.swift */; };
 			WEBAPP05 /* WebAppManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP02 /* WebAppManager.swift */; };
-			PERSIST01B /* PersistentWorkspaceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = PERSIST01 /* PersistentWorkspaceConfig.swift */; };
-			PERSIST02B /* PersistentWorkspaceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = PERSIST02 /* PersistentWorkspaceManager.swift */; };
 			WEBAPP06 /* WebAppNotificationHook.swift in Sources */ = {isa = PBXBuildFile; fileRef = WEBAPP03 /* WebAppNotificationHook.swift */; };
 			DKBND01 /* DirectKeyBindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DKBND00 /* DirectKeyBindings.swift */; };
 			FGPD01 /* ForegroundProcessDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FGPD00 /* ForegroundProcessDetector.swift */; };
 			PISESS02 /* PiSessionMarkerReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = PISESS01 /* PiSessionMarkerReader.swift */; };
 			A5001094 /* NotificationsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001091 /* NotificationsPage.swift */; };
 			A5001095 /* TerminalNotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001092 /* TerminalNotificationStore.swift */; };
-			A5001250 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A5001251 /* Sentry */; };
-			B9000024A1B2C3D4E5F60719 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A5001251 /* Sentry */; };
-			A5001270 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = A5001271 /* PostHog */; };
 			A5001303 /* SurfaceSearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001301 /* SurfaceSearchOverlay.swift */; };
 			A5008371 /* BrowserSearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5008370 /* BrowserSearchOverlay.swift */; };
 			A5008373 /* BrowserFindJavaScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5008372 /* BrowserFindJavaScript.swift */; };
 			A50012F1 /* Backport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50012F0 /* Backport.swift */; };
 			A50012F3 /* KeyboardShortcutSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50012F2 /* KeyboardShortcutSettings.swift */; };
 			A50012F5 /* KeyboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50012F4 /* KeyboardLayout.swift */; };
-			A50DECEE /* MemoryTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5034EEE /* MemoryTelemetry.swift */; };
-			A5001521 /* PostHogAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001520 /* PostHogAnalytics.swift */; };
 			A5001201 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001211 /* UpdateController.swift */; };
 		A5001202 /* UpdateDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001212 /* UpdateDelegate.swift */; };
 		A5001203 /* UpdateDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001213 /* UpdateDriver.swift */; };
@@ -202,6 +194,7 @@
 			9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelectionState.swift; sourceTree = "<group>"; };
 			A1B2C3D4E5F60001 /* NerdFontHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerdFontHelper.swift; sourceTree = "<group>"; };
 			B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDragHandleView.swift; sourceTree = "<group>"; };
+		TELSTUB01 /* TelemetryStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryStubs.swift; sourceTree = "<group>"; };
 			A5001013 /* TabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManager.swift; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
 			A5001015 /* GhosttyTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalView.swift; sourceTree = "<group>"; };
@@ -214,11 +207,9 @@
 		A5001017 /* ghostty.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ghostty.h; sourceTree = "<group>"; };
 		A5001018 /* cmux-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "cmux-Bridging-Header.h"; sourceTree = "<group>"; };
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
-		A5001600 /* SentryHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentryHelper.swift; sourceTree = "<group>"; };
 		A5001620 /* AppleScriptSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptSupport.swift; sourceTree = "<group>"; };
 			A5001510 /* CmuxWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/CmuxWebView.swift; sourceTree = "<group>"; };
 			A5001511 /* UITestRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestRecorder.swift; sourceTree = "<group>"; };
-			A5001520 /* PostHogAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostHogAnalytics.swift; sourceTree = "<group>"; };
 			A5001225 /* SocketControlSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketControlSettings.swift; sourceTree = "<group>"; };
 		A5001410 /* Panel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/Panel.swift; sourceTree = "<group>"; };
 		A5001411 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/TerminalPanel.swift; sourceTree = "<group>"; };
@@ -226,7 +217,6 @@
 		A5001413 /* TerminalPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/TerminalPanelView.swift; sourceTree = "<group>"; };
 		A5001414 /* BrowserPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPanelView.swift; sourceTree = "<group>"; };
 		A5007421 /* BrowserPopupWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/BrowserPopupWindowController.swift; sourceTree = "<group>"; };
-		NS000001 /* TerminalPopupWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/TerminalPopupWindowController.swift; sourceTree = "<group>"; };
 		A5001415 /* PanelContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/PanelContentView.swift; sourceTree = "<group>"; };
 		A5001418 /* MarkdownPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanel.swift; sourceTree = "<group>"; };
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
@@ -237,8 +227,6 @@
 		PFXKEY02 /* AppDelegate+PrefixKeyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+PrefixKeyMode.swift"; sourceTree = "<group>"; };
 		WEBAPP01 /* WebAppDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppDefinition.swift"; sourceTree = "<group>"; };
 		WEBAPP02 /* WebAppManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppManager.swift"; sourceTree = "<group>"; };
-		PERSIST01 /* PersistentWorkspaceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PersistentWorkspaces/PersistentWorkspaceConfig.swift"; sourceTree = "<group>"; };
-		PERSIST02 /* PersistentWorkspaceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PersistentWorkspaces/PersistentWorkspaceManager.swift"; sourceTree = "<group>"; };
 		WEBAPP03 /* WebAppNotificationHook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WebAppShortcuts/WebAppNotificationHook.swift"; sourceTree = "<group>"; };
 		DKBND00 /* DirectKeyBindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectKeyBindings.swift; sourceTree = "<group>"; };
 		FGPD00 /* ForegroundProcessDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundProcessDetector.swift; sourceTree = "<group>"; };
@@ -251,7 +239,6 @@
 		A50012F0 /* Backport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Backport.swift; sourceTree = "<group>"; };
 		A50012F2 /* KeyboardShortcutSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutSettings.swift; sourceTree = "<group>"; };
 		A50012F4 /* KeyboardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardLayout.swift; sourceTree = "<group>"; };
-		A5034EEE /* MemoryTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryTelemetry.swift; sourceTree = "<group>"; };
 		A5001211 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Update/UpdateController.swift; sourceTree = "<group>"; };
 		A5001212 /* UpdateDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Update/UpdateDelegate.swift; sourceTree = "<group>"; };
 		A5001213 /* UpdateDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Update/UpdateDriver.swift; sourceTree = "<group>"; };
@@ -337,8 +324,6 @@
 				files = (
 					A5001006 /* GhosttyKit.xcframework in Frameworks */,
 					A5001230 /* Sparkle in Frameworks */,
-					A5001250 /* Sentry in Frameworks */,
-					A5001270 /* PostHog in Frameworks */,
 					A5001290 /* MarkdownUI in Frameworks */,
 				);
 				runOnlyForDeploymentPostprocessing = 0;
@@ -361,7 +346,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B9000024A1B2C3D4E5F60719 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -443,13 +427,12 @@
 					9AD52285508B1D6A9875E7B3 /* SidebarSelectionState.swift */,
 					A1B2C3D4E5F60001 /* NerdFontHelper.swift */,
 					B9000017A1B2C3D4E5F60719 /* WindowDragHandleView.swift */,
+					TELSTUB01 /* TelemetryStubs.swift */,
 					A50012F0 /* Backport.swift */,
 					A50012F2 /* KeyboardShortcutSettings.swift */,
 					A50012F4 /* KeyboardLayout.swift */,
-					A5034EEE /* MemoryTelemetry.swift */,
 					A5001013 /* TabManager.swift */,
 					A5001511 /* UITestRecorder.swift */,
-					A5001520 /* PostHogAnalytics.swift */,
 					A5001416 /* Workspace.swift */,
 				A5001417 /* WorkspaceContentView.swift */,
 				A5001014 /* GhosttyConfig.swift */,
@@ -461,7 +444,6 @@
 				A5001544 /* TerminalImageTransfer.swift */,
 				A5001545 /* TerminalSSHSessionDetector.swift */,
 				A5001225 /* SocketControlSettings.swift */,
-				A5001600 /* SentryHelper.swift */,
 				A5001620 /* AppleScriptSupport.swift */,
 				A5001090 /* AppDelegate.swift */,
 				PFXKEY01 /* PrefixKeyMode.swift */,
@@ -471,8 +453,6 @@
 				FGPD00 /* ForegroundProcessDetector.swift */,
 				WEBAPP01 /* WebAppDefinition.swift */,
 				WEBAPP02 /* WebAppManager.swift */,
-				PERSIST01 /* PersistentWorkspaceConfig.swift */,
-				PERSIST02 /* PersistentWorkspaceManager.swift */,
 				WEBAPP03 /* WebAppNotificationHook.swift */,
 				A5001091 /* NotificationsPage.swift */,
 				A5001092 /* TerminalNotificationStore.swift */,
@@ -485,7 +465,6 @@
 				A5001413 /* TerminalPanelView.swift */,
 				A5001414 /* BrowserPanelView.swift */,
 				A5007421 /* BrowserPopupWindowController.swift */,
-				NS000001 /* TerminalPopupWindowController.swift */,
 				A5001418 /* MarkdownPanel.swift */,
 				A5001419 /* MarkdownPanelView.swift */,
 				A5001510 /* CmuxWebView.swift */,
@@ -626,8 +605,6 @@
 			);
 				packageProductDependencies = (
 					A5001231 /* Sparkle */,
-					A5001251 /* Sentry */,
-					A5001271 /* PostHog */,
 					A5001261 /* Bonsplit */,
 					A5001291 /* MarkdownUI */,
 					A50012B1 /* Yams */,
@@ -649,7 +626,6 @@
 			dependencies = (
 			);
 			packageProductDependencies = (
-				A5001251 /* Sentry */,
 			);
 			name = "cmux-cli";
 			productName = cmux;
@@ -730,8 +706,6 @@
 			mainGroup = A5001040;
 				packageReferences = (
 					A5001232 /* XCRemoteSwiftPackageReference "Sparkle" */,
-					A5001252 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
-					A5001272 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 					A5001292 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 					A5001260 /* XCLocalSwiftPackageReference "bonsplit" */,
 					A50012B2 /* XCRemoteSwiftPackageReference "Yams" */,
@@ -758,13 +732,12 @@
 					E62155868BB29FEB5DAAAF25 /* SidebarSelectionState.swift in Sources */,
 					F6E5D4C3B2A10001 /* NerdFontHelper.swift in Sources */,
 					B9000018A1B2C3D4E5F60719 /* WindowDragHandleView.swift in Sources */,
+					TELSTUB01B /* TelemetryStubs.swift in Sources */,
 					A50012F1 /* Backport.swift in Sources */,
 					A50012F3 /* KeyboardShortcutSettings.swift in Sources */,
 					A50012F5 /* KeyboardLayout.swift in Sources */,
-					A50DECEE /* MemoryTelemetry.swift in Sources */,
 						A5001003 /* TabManager.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
-						A5001521 /* PostHogAnalytics.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
 				A5001407 /* WorkspaceContentView.swift in Sources */,
 				A5001004 /* GhosttyConfig.swift in Sources */,
@@ -776,15 +749,12 @@
 				A5001542 /* TerminalImageTransfer.swift in Sources */,
 				A5001543 /* TerminalSSHSessionDetector.swift in Sources */,
 				A5001226 /* SocketControlSettings.swift in Sources */,
-				A5001601 /* SentryHelper.swift in Sources */,
 				A5001621 /* AppleScriptSupport.swift in Sources */,
 				A5001093 /* AppDelegate.swift in Sources */,
 				PFXKEY03 /* PrefixKeyMode.swift in Sources */,
 				PFXKEY04 /* AppDelegate+PrefixKeyMode.swift in Sources */,
 				WEBAPP04 /* WebAppDefinition.swift in Sources */,
 				WEBAPP05 /* WebAppManager.swift in Sources */,
-				PERSIST01B /* PersistentWorkspaceConfig.swift in Sources */,
-				PERSIST02B /* PersistentWorkspaceManager.swift in Sources */,
 				WEBAPP06 /* WebAppNotificationHook.swift in Sources */,
 				DKBND01 /* DirectKeyBindings.swift in Sources */,
 				FGPD01 /* ForegroundProcessDetector.swift in Sources */,
@@ -800,7 +770,6 @@
 				A5001403 /* TerminalPanelView.swift in Sources */,
 				A5001404 /* BrowserPanelView.swift in Sources */,
 				A5007420 /* BrowserPopupWindowController.swift in Sources */,
-				NS000002 /* TerminalPopupWindowController.swift in Sources */,
 				A5001420 /* MarkdownPanel.swift in Sources */,
 				A5001421 /* MarkdownPanelView.swift in Sources */,
 				A5001500 /* CmuxWebView.swift in Sources */,
@@ -1178,22 +1147,6 @@
 				minimumVersion = 2.5.1;
 			};
 		};
-			A5001252 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
-				isa = XCRemoteSwiftPackageReference;
-				repositoryURL = "https://github.com/getsentry/sentry-cocoa.git";
-				requirement = {
-					kind = upToNextMajorVersion;
-					minimumVersion = 9.3.0;
-				};
-			};
-			A5001272 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
-				isa = XCRemoteSwiftPackageReference;
-				repositoryURL = "https://github.com/PostHog/posthog-ios.git";
-				requirement = {
-					kind = upToNextMajorVersion;
-					minimumVersion = 3.41.0;
-				};
-			};
 			A5001292 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
 				isa = XCRemoteSwiftPackageReference;
 				repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
@@ -1222,16 +1175,6 @@
 			package = A5001232 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
 		};
-			A5001251 /* Sentry */ = {
-				isa = XCSwiftPackageProductDependency;
-				package = A5001252 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
-				productName = Sentry;
-			};
-			A5001271 /* PostHog */ = {
-				isa = XCSwiftPackageProductDependency;
-				package = A5001272 /* XCRemoteSwiftPackageReference "posthog-ios" */;
-				productName = PostHog;
-			};
 			A5001261 /* Bonsplit */ = {
 				isa = XCSwiftPackageProductDependency;
 				package = A5001260 /* XCLocalSwiftPackageReference "bonsplit" */;

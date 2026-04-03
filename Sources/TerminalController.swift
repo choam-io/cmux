@@ -50,8 +50,6 @@ class TerminalController {
     private nonisolated let listenerStateLock = NSLock()
     private var clientHandlers: [Int32: Thread] = [:]
     private var tabManager: TabManager?
-    /// Popup terminal controller (lazily created on first toggle).
-    private var popupController: TerminalPopupWindowController?
     private var accessMode: SocketControlMode = .cmuxOnly
     private let myPid = getpid()
     private nonisolated(unsafe) static var socketCommandPolicyDepth: Int = 0
@@ -2170,18 +2168,6 @@ class TerminalController {
         case "notification.clear":
             return v2Result(id: id, self.v2NotificationClear())
 
-        // Popup terminal
-        case "popup.toggle":
-            return v2Result(id: id, self.v2PopupToggle(params: params))
-        case "popup.show":
-            return v2Result(id: id, self.v2PopupShow(params: params))
-        case "popup.hide":
-            return v2Result(id: id, self.v2PopupHide())
-        case "popup.close":
-            return v2Result(id: id, self.v2PopupClose())
-        case "popup.add_tab":
-            return v2Result(id: id, self.v2PopupAddTab(params: params))
-
         // App focus
         case "app.focus_override.set":
             return v2Result(id: id, self.v2AppFocusOverride(params: params))
@@ -2505,11 +2491,6 @@ class TerminalController {
             "notification.create_for_target",
             "notification.list",
             "notification.clear",
-            "popup.toggle",
-            "popup.show",
-            "popup.hide",
-            "popup.close",
-            "popup.add_tab",
             "app.focus_override.set",
             "app.simulate_active",
             "markdown.open",
@@ -6667,167 +6648,6 @@ class TerminalController {
             TerminalNotificationStore.shared.clearAll()
         }
         return .ok([:])
-    }
-
-    // MARK: - Popup Terminal
-
-    /// Initialize the dropdown eagerly so the global Cmd+' hotkey is registered at startup.
-    func initializeDropdown() {
-        _ = getOrCreatePopupController(
-            cwd: nil,
-            command: "/bin/zsh -lic '$HOME/.cargo/bin/workmux dashboard'",
-            widthPct: nil,
-            heightPct: nil
-        )
-    }
-
-    /// Called from prefix key mode or other direct invocations (not via socket).
-    func togglePopup(parentWindow: NSWindow?, command: String? = nil) {
-        let controller = getOrCreatePopupController(
-            cwd: nil,
-            command: command,
-            widthPct: nil,
-            heightPct: nil
-        )
-        controller.toggle()
-    }
-
-    // MARK: - Popup Tab Forwarding (called from AppDelegate shortcut handler)
-
-    func popupAddTerminalTab() {
-        popupController?.addTerminalTab()
-    }
-
-    func popupAddBrowserTab(url: URL, title: String? = nil) {
-        popupController?.addBrowserTab(url: url, title: title)
-    }
-
-    func popupPromptBrowserTab() {
-        // Open a blank browser tab directly -- address bar is inline
-        popupController?.addBrowserTab(url: URL(string: "about:blank")!, title: "New tab")
-    }
-
-    func popupCloseSelectedTab() {
-        popupController?.closeSelectedTab()
-    }
-
-    func popupSelectNextTab() {
-        popupController?.selectNextTab()
-    }
-
-    func popupSelectPreviousTab() {
-        popupController?.selectPreviousTab()
-    }
-
-    func popupSelectTab(at index: Int) {
-        popupController?.selectTab(at: index)
-    }
-
-    /// Number of tabs in the popup terminal (for memory telemetry).
-    var popupTabCount: Int {
-        popupController?.tabs.count ?? 0
-    }
-
-    nonisolated var isPopupVisible: Bool {
-        // Safe to read -- only checks a Bool on the controller
-        MainActor.assumeIsolated {
-            popupController?.isVisible ?? false
-        }
-    }
-
-    private func v2PopupToggle(params: [String: Any]) -> V2CallResult {
-        let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-
-        v2MainSync {
-            let controller = getOrCreatePopupController(
-                cwd: cwd,
-                command: command,
-                widthPct: nil,
-                heightPct: heightPct
-            )
-            controller.toggle()
-        }
-        return .ok(["visible": popupController?.isVisible ?? false])
-    }
-
-    private func v2PopupShow(params: [String: Any]) -> V2CallResult {
-        let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let heightPct = (params["height_percent"] as? NSNumber)?.doubleValue
-
-        v2MainSync {
-            let controller = getOrCreatePopupController(
-                cwd: cwd,
-                command: command,
-                widthPct: nil,
-                heightPct: heightPct
-            )
-            controller.show()
-        }
-        return .ok(["visible": true])
-    }
-
-    private func v2PopupHide() -> V2CallResult {
-        v2MainSync {
-            popupController?.hide()
-        }
-        return .ok(["visible": false])
-    }
-
-    private func v2PopupClose() -> V2CallResult {
-        v2MainSync {
-            popupController?.close()
-            popupController = nil
-        }
-        return .ok([:])
-    }
-
-    private func v2PopupAddTab(params: [String: Any]) -> V2CallResult {
-        let type = v2RawString(params, "type")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "terminal"
-        let title = v2RawString(params, "title")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let command = v2RawString(params, "command")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cwd = v2RawString(params, "cwd")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let urlString = v2RawString(params, "url")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let pinned = v2Bool(params, "pinned") ?? false
-
-        v2MainSync {
-            let controller = getOrCreatePopupController(
-                cwd: nil, command: nil, widthPct: nil, heightPct: nil
-            )
-            if !controller.isVisible {
-                controller.show()
-            }
-
-            switch type {
-            case "browser":
-                guard let urlString, let url = URL(string: urlString) else { break }
-                controller.addBrowserTab(url: url, title: title)
-            default:
-                controller.addTerminalTab(command: command, cwd: cwd, title: title, pinned: pinned)
-            }
-        }
-        return .ok([:])
-    }
-
-    private func getOrCreatePopupController(
-        cwd: String?,
-        command: String?,
-        widthPct: Double?,
-        heightPct: Double?
-    ) -> TerminalPopupWindowController {
-        if let existing = popupController {
-            return existing
-        }
-        var config = TerminalPopupWindowController.Config()
-        config.workingDirectory = cwd
-        config.initialCommand = command
-        if let heightPct { config.heightPercent = CGFloat(heightPct) }
-
-        let controller = TerminalPopupWindowController(config: config)
-        popupController = controller
-        return controller
     }
 
     private func v2FeedbackOpen(params: [String: Any]) -> V2CallResult {

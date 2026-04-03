@@ -344,8 +344,6 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var gitBranch: SessionGitBranchSnapshot?
     /// If set, this workspace hosts a web app shortcut (e.g. "slack").
     var webAppId: String?
-    /// If set, this workspace is a persistent workspace from workspaces.yaml.
-    var persistentWorkspaceId: String?
 }
 
 struct SessionTabManagerSnapshot: Codable, Sendable {

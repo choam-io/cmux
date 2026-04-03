@@ -110,9 +110,6 @@ final class PrefixKeyMode {
         // Rename
         ",": .renameWorkspace, // prefix+, = rename (tmux style)
         
-        // Popup terminal
-        "i": .togglePopup,     // prefix+i = toggle popup terminal
-        
         // Bookmarks
         "b": .openBookmarks,   // prefix+b = open bookmark launcher
         
@@ -171,24 +168,14 @@ final class PrefixKeyMode {
             return false
         }
         
-        // Handle number keys: popup tab selection (0-9) when popup visible,
-        // otherwise workspace selection (1-9)
+        // Handle number keys: workspace selection (1-9)
         if let digit = Int(key), digit >= 0 && digit <= 9 {
-            if TerminalController.shared.isPopupVisible {
-                postPopupTabSelection(digit)
-                return true
-            } else if digit >= 1 {
+            if digit >= 1 {
                 postWorkspaceSelection(digit)
                 return true
             }
         }
         
-        // Check persistent workspace shortcuts (from workspaces.yaml)
-        if PersistentWorkspaceConfigStore.activeShortcutKeys.contains(key) {
-            postPersistentWorkspaceToggle(key)
-            return true
-        }
-
         // Look up the action
         if let action = Self.defaultBindings[key] ?? Self.defaultBindings[key.lowercased()] {
             os_log("prefix.dispatch: '%{public}@' -> %{public}@", log: prefixLog, type: .debug, key, action.rawValue)
@@ -248,27 +235,9 @@ final class PrefixKeyMode {
         #endif
     }
 
-    private func postPersistentWorkspaceToggle(_ shortcutKey: String) {
-        NotificationCenter.default.post(
-            name: Self.performActionNotification,
-            object: nil,
-            userInfo: ["togglePersistentWorkspace": shortcutKey]
-        )
-        #if DEBUG
-        dlog("prefix.togglePersistentWorkspace: \(shortcutKey)")
-        #endif
-    }
 
-    private func postPopupTabSelection(_ index: Int) {
-        NotificationCenter.default.post(
-            name: Self.performActionNotification,
-            object: nil,
-            userInfo: ["selectPopupTab": index]
-        )
-        #if DEBUG
-        dlog("prefix.selectPopupTab: \(index)")
-        #endif
-    }
+
+
     
     // MARK: - Prefix Mode State
     

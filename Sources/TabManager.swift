@@ -5586,11 +5586,6 @@ extension TabManager {
                 WebAppManager.shared.reconnectWebAppWorkspace(appId: webAppId, workspaceId: workspace.id)
             }
 
-            // Reconnect persistent workspace if this was a config-defined workspace
-            if let persistentId = workspaceSnapshot.persistentWorkspaceId {
-                PersistentWorkspaceManager.shared.reconnect(definitionId: persistentId, workspaceId: workspace.id)
-            }
-
             newTabs.append(workspace)
         }
 

@@ -3,7 +3,7 @@ import SwiftUI
 import Bonsplit
 import CoreServices
 import UserNotifications
-import Sentry
+
 import WebKit
 import Combine
 import ObjectiveC.runtime
@@ -2300,16 +2300,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Notification) {
         let env = ProcessInfo.processInfo.environment
         let isRunningUnderXCTest = isRunningUnderXCTest(env)
-        let telemetryEnabled = TelemetrySettings.enabledForCurrentLaunch
 
         // Install prefix key mode observer for tmux-style shortcuts
         installPrefixKeyModeObserver()
-
-        // Initialize the global dropdown terminal so Cmd+' hotkey is registered
-        TerminalController.shared.initializeDropdown()
-
-        // Start memory telemetry to track potential leaks
-        MemoryTelemetry.shared.start()
 
         DistributedNotificationCenter.default().addObserver(
             self,
@@ -2335,43 +2328,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self?.writeUITestDiagnosticsIfNeeded(stage: "after1s")
         }
 #endif
-
-        if telemetryEnabled {
-            // Pre-warm locale before Sentry to avoid a startup data race.
-            // Locale initialization (os.locale.ensureLocale / NSLocale._preferredLanguages)
-            // on the main thread can race with Sentry's background init thread
-            // calling posix.getenv, causing a SIGSEGV ~134ms after launch.
-            // Forcing locale access here before SentrySDK.start eliminates the race.
-            // Related to: #836
-            _ = Locale.current
-            _ = NSLocale.preferredLanguages
-
-            SentrySDK.start { options in
-                options.dsn = "https://ecba1ec90ecaee02a102fba931b6d2b3@o4507547940749312.ingest.us.sentry.io/4510796264636416"
-                #if DEBUG
-                options.environment = "development"
-                options.debug = true
-                #else
-                options.environment = "production"
-                options.debug = false
-                #endif
-                options.sendDefaultPii = false
-
-                // Performance tracing (10% of transactions)
-                options.tracesSampleRate = 0.1
-                // Keep app-hang tracking enabled, but avoid reporting short main-thread stalls
-                // as hangs in normal user interaction flows.
-                options.appHangTimeoutInterval = 8.0
-                // Attach stack traces to all events
-                options.attachStacktrace = true
-                // Avoid recursively capturing failed requests from Sentry's own ingestion endpoint.
-                options.enableCaptureFailedRequests = false
-            }
-        }
-
-        if telemetryEnabled && !isRunningUnderXCTest {
-            PostHogAnalytics.shared.startIfNeeded()
-        }
 
         let forceDuplicateLaunchObserver = env["CMUX_UI_TEST_ENABLE_DUPLICATE_LAUNCH_OBSERVER"] == "1"
 
@@ -2689,13 +2645,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 #endif
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        sentryBreadcrumb("app.didBecomeActive", category: "lifecycle", data: [
-            "tabCount": tabManager?.tabs.count ?? 0
-        ])
-        if TelemetrySettings.enabledForCurrentLaunch && !isRunningUnderXCTestCached {
-            PostHogAnalytics.shared.trackActive(reason: "didBecomeActive")
-        }
-
         guard let notificationStore else { return }
         notificationStore.handleApplicationDidBecomeActive()
         guard let tabManager else { return }
@@ -2763,9 +2712,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         TerminalController.shared.stop()
         VSCodeServeWebController.shared.stop()
         BrowserProfileStore.shared.flushPendingSaves()
-        if TelemetrySettings.enabledForCurrentLaunch {
-            PostHogAnalytics.shared.flush()
-        }
         notificationStore?.clearAll()
         enableSuddenTerminationIfNeeded()
     }
@@ -2990,8 +2936,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             ) {
                 primaryWindow.setFrame(restoredFrame, display: true)
             }
-            // No session to restore -- auto-launch persistent workspaces now.
-            PersistentWorkspaceManager.shared.autoLaunch(tabManager: primaryContext.tabManager)
         }
 
         if let startupSnapshot {
@@ -3025,14 +2969,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func completeStartupSessionRestore() {
         startupSessionSnapshot = nil
         isApplyingStartupSessionRestore = false
-        // Don't save immediately after restore -- the restored state may be degraded
-        // if some panels failed to create. The autosave timer (every 8s) will capture
-        // the state once everything has settled.
-
-        // Auto-launch persistent workspaces that aren't already restored from session.
-        if let tabManager {
-            PersistentWorkspaceManager.shared.autoLaunch(tabManager: tabManager)
-        }
     }
 
     private func applySessionWindowSnapshot(
@@ -3499,11 +3435,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard let tabManager,
               let config = socketListenerConfigurationIfEnabled() else { return }
         let restartPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
-        sentryBreadcrumb("socket.listener.restart", category: "socket", data: [
-            "mode": config.mode.rawValue,
-            "path": restartPath,
-            "source": source
-        ])
         TerminalController.shared.stop()
         TerminalController.shared.start(tabManager: tabManager, socketPath: restartPath, accessMode: config.mode)
     }
@@ -7051,10 +6982,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             "selected=\(snapshot.selectedWorkspace)"
         )
     }
-
-    @objc func triggerSentryTestCrash(_ sender: Any?) {
-        SentrySDK.crash()
-    }
 #endif
 
 #if DEBUG
@@ -9160,46 +9087,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func handleCustomShortcut(event: NSEvent) -> Bool {
         // Prefix key mode: tmux-style prefix+key shortcuts
-        // Must run even when popup is focused (prefix+i toggles popup)
-        if handlePrefixKeyMode(event: event) {
-            return true
-        }
-
-        // If the popup overlay is focused, handle its tab shortcuts here
-        // (consuming the event) so the main menu doesn't steal them.
-        if let keyWindow = NSApp.keyWindow,
-           keyWindow.identifier?.rawValue == "cmux.terminal-popup" {
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let hasCmd = flags.contains(.command)
-            let hasCtrl = flags.contains(.control)
-            let hasOpt = flags.contains(.option)
-            let chars = event.charactersIgnoringModifiers
-
-            if hasCmd && !hasCtrl && !hasOpt && chars?.lowercased() == "t" {
-                let hasShift = flags.contains(.shift)
-                if hasShift {
-                    TerminalController.shared.popupPromptBrowserTab()
-                } else {
-                    TerminalController.shared.popupAddTerminalTab()
-                }
-                return true
-            }
-            if hasCmd && !hasCtrl && !hasOpt && chars == "w" {
-                TerminalController.shared.popupCloseSelectedTab()
-                return true
-            }
-            if hasCtrl && event.keyCode == 48 /* Tab */ {
-                if flags.contains(.shift) {
-                    TerminalController.shared.popupSelectPreviousTab()
-                } else {
-                    TerminalController.shared.popupSelectNextTab()
-                }
-                return true
-            }
-            return false
-        }
-
-        // Direct key bindings: Ctrl+h/j/k/l pane navigation (no prefix required)
         if handlePrefixKeyMode(event: event) {
             return true
         }
@@ -11126,9 +11013,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         register: @escaping (CFURL) -> OSStatus = { url in
             LSRegisterURL(url, true)
         },
-        breadcrumb: @escaping (_ message: String, _ data: [String: Any]) -> Void = { message, data in
-            sentryBreadcrumb(message, category: "startup", data: data)
-        }
+        breadcrumb: @escaping (_ message: String, _ data: [String: Any]) -> Void = { _, _ in }
     ) {
         let normalizedURL = bundleURL.standardizedFileURL
         breadcrumb("launchservices.register.schedule", [
