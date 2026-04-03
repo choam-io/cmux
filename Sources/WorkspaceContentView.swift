@@ -259,6 +259,13 @@ struct WorkspaceContentView: View {
             workspace.panels.count > 1
         let usesWorkspacePaneOverlay = TmuxOverlayExperimentSettings.target().usesWorkspacePaneOverlay
 
+        // Read focusRevision to establish a @Published dependency so this view re-renders
+        // when panel focus changes. Without this, the `isFocused` check inside the
+        // BonsplitView closure can use stale values because `focusedPanelId` is computed
+        // from @Observable Bonsplit state that doesn't reliably trigger Combine-based
+        // re-renders through the NSHostingController boundary.
+        let _ = workspace.focusRevision
+
         // Inactive workspaces are kept alive in a ZStack (for state preservation) but their
         // AppKit-backed views can still intercept drags. Disable drop acceptance for them.
         let _ = { workspace.bonsplitController.isInteractive = isWorkspaceInputActive }()

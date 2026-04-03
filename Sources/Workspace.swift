@@ -5511,6 +5511,11 @@ final class Workspace: Identifiable, ObservableObject {
     /// Mapping from bonsplit TabID to our Panel instances
     @Published private(set) var panels: [UUID: any Panel] = [:]
 
+    /// Monotonic counter bumped on focus/selection changes so SwiftUI views that depend
+    /// on `focusedPanelId` (a computed property backed by `@Observable` Bonsplit state)
+    /// re-render even when the Observation-to-Combine bridge doesn't fire.
+    @Published private(set) var focusRevision: UInt64 = 0
+
     /// Subscriptions for panel updates (e.g., browser title changes)
     private var panelSubscriptions: [UUID: AnyCancellable] = [:]
 
@@ -8749,6 +8754,12 @@ final class Workspace: Identifiable, ObservableObject {
                 terminalFocusPanelId: panelId
             )
         }
+
+        // Bump the focus revision so WorkspaceContentView re-renders.
+        // `focusedPanelId` is a computed property backed by @Observable Bonsplit state;
+        // the Observation→Combine bridge doesn't always fire when Bonsplit focus changes
+        // happen inside an NSHostingController hosting the pane content views.
+        focusRevision &+= 1
     }
 
     private func maybeAutoFocusBrowserAddressBarOnPanelFocus(
@@ -9053,6 +9064,7 @@ final class Workspace: Identifiable, ObservableObject {
         }
         gitBranch = panelGitBranches[targetPanelId]
         pullRequest = panelPullRequests[targetPanelId]
+        focusRevision &+= 1
     }
 
     /// Reconcile focus/first-responder convergence.
