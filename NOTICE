@@ -1,0 +1,25 @@
+choam-io/cmux
+
+This software is a modified version of cmux, originally developed by
+Manaflow, Inc. (https://github.com/manaflow-ai/cmux).
+
+The original work is dual-licensed under GPL-3.0-or-later and a commercial
+license. This fork is distributed under the same GPL-3.0-or-later terms.
+See LICENSE for the full text.
+
+Modifications by choam-io include:
+
+  - Removal of all telemetry (PostHog, Sentry) -- replaced with no-op stubs
+  - Removal of persistent workspaces feature
+  - Removal of popup terminal feature
+  - Addition of prefix key mode (tmux-style keybinding layer)
+  - Addition of direct Ctrl+h/j/k/l vim-aware pane navigation
+  - Addition of pi agent session restore support
+  - Addition of socket automation mode for external tool control
+  - Addition of browser tabs and configurable bookmark launcher
+  - Addition of NerdFont glyph rendering in sidebar and command palette
+  - CI/release workflow adapted for choam-io fork
+  - Bundle ID changed to io.choam.cmux
+
+The upstream repository is: https://github.com/manaflow-ai/cmux
+The source for this fork is: https://github.com/choam-io/cmux
