@@ -2103,6 +2103,13 @@ struct ContentView: View {
         static let updateHasAvailable = "update.hasAvailable"
         static let cliInstalledInPATH = "cli.installedInPATH"
 
+        static let hasCodeWorkspace = "workspace.hasCodeWorkspace"
+        static let codeWorkspacePath = "workspace.codeWorkspacePath"
+        static let codeWorkspaceName = "workspace.codeWorkspaceName"
+
+        static let hasCodespace = "workspace.hasCodespace"
+        static let codespaceName = "workspace.codespaceName"
+
         static func terminalOpenTargetAvailable(_ target: TerminalDirectoryOpenTarget) -> String {
             "terminal.openTarget.\(target.rawValue).available"
         }
@@ -5380,6 +5387,7 @@ struct ContentView: View {
         for contribution in contributions {
             guard contribution.when(context), contribution.enablement(context) else { continue }
             guard let action = handlerRegistry.handler(for: contribution.commandId) else {
+                print("warning: No command palette handler registered for \(contribution.commandId)")
                 assertionFailure("No command palette handler registered for \(contribution.commandId)")
                 continue
             }
@@ -5580,6 +5588,19 @@ struct ContentView: View {
 
         if case .updateAvailable = updateViewModel.effectiveState {
             snapshot.setBool(CommandPaletteContextKeys.updateHasAvailable, true)
+        }
+
+        if let workspace = tabManager.selectedWorkspace {
+            let dir = workspace.currentDirectory
+            if !dir.isEmpty, let (wsPath, wsName) = Self.findCodeWorkspace(startingFrom: dir) {
+                snapshot.setBool(CommandPaletteContextKeys.hasCodeWorkspace, true)
+                snapshot.setString(CommandPaletteContextKeys.codeWorkspacePath, wsPath)
+                snapshot.setString(CommandPaletteContextKeys.codeWorkspaceName, wsName)
+            }
+            if !dir.isEmpty, let csName = Self.findCodespaceName(startingFrom: dir) {
+                snapshot.setBool(CommandPaletteContextKeys.hasCodespace, true)
+                snapshot.setString(CommandPaletteContextKeys.codespaceName, csName)
+            }
         }
 
         return snapshot
@@ -6146,6 +6167,32 @@ struct ContentView: View {
             )
         )
 
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openCodeWorkspace",
+                title: constant(String(localized: "command.openCodeWorkspace.title", defaultValue: "Open Workspace in VS Code Insiders")),
+                subtitle: { context in
+                    let name = context.string(CommandPaletteContextKeys.codeWorkspaceName) ?? "Workspace"
+                    return String(localized: "commandPalette.subtitle.codeWorkspace", defaultValue: "Editor • \(name)")
+                },
+                keywords: ["open", "workspace", "vscode", "code", "insiders", "editor", "project"],
+                when: { $0.bool(CommandPaletteContextKeys.hasCodeWorkspace) }
+            )
+        )
+
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openInCodespace",
+                title: constant(String(localized: "command.openInCodespace.title", defaultValue: "Open in Codespace")),
+                subtitle: { context in
+                    let name = context.string(CommandPaletteContextKeys.codespaceName) ?? "Codespace"
+                    return String(localized: "commandPalette.subtitle.codespace", defaultValue: "Editor \u{2022} \(name)")
+                },
+                keywords: ["open", "codespace", "remote", "vscode", "code", "insiders", "github", "dev", "environment"],
+                when: { $0.bool(CommandPaletteContextKeys.hasCodespace) }
+            )
+        )
+
         for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {
             contributions.append(
                 CommandPaletteCommandContribution(
@@ -6358,6 +6405,37 @@ struct ContentView: View {
     }
 
     private func registerCommandPaletteHandlers(_ registry: inout CommandPaletteHandlerRegistry) {
+        // Register handlers for config-defined bookmarks so they work in commands mode.
+        for bookmark in cmuxConfigStore.loadedBookmarks {
+            let captured = bookmark
+            registry.register(commandId: bookmark.commandId) { [tabManager] in
+                guard let workspace = tabManager.selectedWorkspace else { return }
+                guard let paneId = workspace.bonsplitController.focusedPaneId
+                    ?? workspace.bonsplitController.allPaneIds.first else { return }
+
+                switch captured.type {
+                case .browser:
+                    if let urlString = captured.url, let url = URL(string: urlString) {
+                        workspace.newBrowserSurface(inPane: paneId, url: url, focus: true)
+                    }
+                case .terminal:
+                    let cwd = captured.cwd ?? workspace.currentDirectory
+                    let wrappedCommand: String?
+                    if let cmd = captured.command, !cmd.isEmpty {
+                        wrappedCommand = "/bin/zsh -c '\(cmd); exec /bin/zsh'"
+                    } else {
+                        wrappedCommand = nil
+                    }
+                    workspace.newTerminalSurface(
+                        inPane: paneId,
+                        focus: true,
+                        workingDirectory: cwd,
+                        initialCommand: wrappedCommand
+                    )
+                }
+            }
+        }
+
         registry.register(commandId: "palette.newWorkspace") {
             tabManager.addWorkspace()
         }
@@ -6640,6 +6718,12 @@ struct ContentView: View {
                     NSSound.beep()
                 }
             }
+        }
+        registry.register(commandId: "palette.openCodeWorkspace") {
+            openCodeWorkspaceInVSCodeInsiders()
+        }
+        registry.register(commandId: "palette.openInCodespace") {
+            openInCodespace()
         }
         registry.register(commandId: "palette.vscodeServeWebStop") {
             stopInlineVSCodeServeWeb()
@@ -7826,6 +7910,100 @@ struct ContentView: View {
             }
         }
         return true
+    }
+
+    /// Walk up from `startDir` looking for any `*.code-workspace` file.
+    /// Returns `(filePath, displayName)` where displayName is the filename
+    /// without the `.code-workspace` extension.
+    nonisolated private static func findCodeWorkspace(startingFrom startDir: String) -> (String, String)? {
+        let fm = FileManager.default
+        var dir = startDir
+        while dir != "/" && !dir.isEmpty {
+            if let contents = try? fm.contentsOfDirectory(atPath: dir) {
+                for file in contents where file.hasSuffix(".code-workspace") {
+                    let fullPath = (dir as NSString).appendingPathComponent(file)
+                    let name = (file as NSString).deletingPathExtension
+                    return (fullPath, name)
+                }
+            }
+            dir = (dir as NSString).deletingLastPathComponent
+        }
+        return nil
+    }
+
+    private func openCodeWorkspaceInVSCodeInsiders() {
+        guard let workspace = tabManager.selectedWorkspace else {
+            NSSound.beep()
+            return
+        }
+        let dir = workspace.currentDirectory
+        guard !dir.isEmpty,
+              let (wsPath, _) = Self.findCodeWorkspace(startingFrom: dir) else {
+            NSSound.beep()
+            return
+        }
+        let appName = "Visual Studio Code - Insiders"
+        guard NSWorkspace.shared.fullPath(forApplication: appName) != nil else {
+            NSSound.beep()
+            return
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", appName, wsPath]
+        try? process.run()
+    }
+
+    /// Walk up from `startDir` looking for `.workmux-group.yaml` with a
+    /// `codespace_name:` field in the `dev_env:` section.
+    nonisolated private static func findCodespaceName(startingFrom startDir: String) -> String? {
+        let fm = FileManager.default
+        var dir = startDir
+        while dir != "/" && !dir.isEmpty {
+            let yamlPath = (dir as NSString).appendingPathComponent(".workmux-group.yaml")
+            if fm.fileExists(atPath: yamlPath),
+               let contents = try? String(contentsOfFile: yamlPath, encoding: .utf8) {
+                // Simple line-based parse: find codespace_name: value under dev_env:
+                var inDevEnv = false
+                for line in contents.components(separatedBy: .newlines) {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("dev_env:") {
+                        inDevEnv = true
+                        continue
+                    }
+                    // Exit dev_env block on next top-level key (no leading whitespace)
+                    if inDevEnv && !line.hasPrefix(" ") && !line.hasPrefix("\t") && !trimmed.isEmpty && !trimmed.hasPrefix("#") {
+                        inDevEnv = false
+                    }
+                    if inDevEnv && trimmed.hasPrefix("codespace_name:") {
+                        let value = trimmed.dropFirst("codespace_name:".count)
+                            .trimmingCharacters(in: .whitespaces)
+                            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                        if !value.isEmpty {
+                            return value
+                        }
+                    }
+                }
+            }
+            dir = (dir as NSString).deletingLastPathComponent
+        }
+        return nil
+    }
+
+    private func openInCodespace() {
+        guard let workspace = tabManager.selectedWorkspace else {
+            NSSound.beep()
+            return
+        }
+        let dir = workspace.currentDirectory
+        guard !dir.isEmpty,
+              let csName = Self.findCodespaceName(startingFrom: dir) else {
+            NSSound.beep()
+            return
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["gh", "codespace", "code", "-c", csName, "--insiders"]
+        try? process.run()
     }
 
     private func focusedTerminalDirectoryURL() -> URL? {
